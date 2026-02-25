@@ -200,7 +200,7 @@ async function seed(): Promise<void> {
             // ST_Buffer by 0.00005 degrees (~5 meters) eliminates micro-gaps between boundaries
             const insertSql = `
                 INSERT INTO jurisdictions (name, type, geom)
-                VALUES ($1, 'county', ST_Multi(ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON($2), 4326), 0.00005)))
+                VALUES ($1, 'county', ST_Multi(ST_SimplifyPreserveTopology(ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON($2), 4326), 0.00005), 0.0005)))
                 RETURNING id;
             `;
             const jResult = await client.query<{ id: string }>(insertSql, [
@@ -283,7 +283,7 @@ async function seed(): Promise<void> {
             VALUES (
                 'Yonkers',
                 'city',
-                ST_Multi(ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 0.00005))
+                ST_Multi(ST_SimplifyPreserveTopology(ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326), 0.00005), 0.0005))
             )
             RETURNING id;
         `;

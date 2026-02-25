@@ -5,6 +5,10 @@ dotenv.config();
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    max: 20,                       // 2-3x CONCURRENCY headroom
+    idleTimeoutMillis: 30000,      // release idle connections after 30s
+    connectionTimeoutMillis: 5000, // fail fast if DB unreachable
+    statement_timeout: 60000,      // accommodate large batches
 });
 
 pool.on('error', (err: Error) => {
