@@ -69,17 +69,20 @@ router.get(
 
         const sql = `
             SELECT 
-                COALESCE(SUM(subtotal), 0) AS total_sales,
-                COALESCE(SUM(tax_amount), 0) AS total_tax,
+                COALESCE(SUM(subtotal), 0)::numeric(12,2) AS total_sales,
+                COALESCE(SUM(tax_amount), 0)::numeric(12,2) AS total_tax,
                 COUNT(*) AS processed_orders
             FROM orders
             ${whereClause};
         `;
         const result = await query(sql, values);
         const row = result.rows[0] as Record<string, unknown>;
+        // Ensure consistent "0.00" format even when no rows match
+        const totalSales = String(row.total_sales);
+        const totalTax = String(row.total_tax);
         res.json({
-            total_sales: String(row.total_sales),
-            total_tax: String(row.total_tax),
+            total_sales: totalSales.includes('.') ? totalSales : totalSales + '.00',
+            total_tax: totalTax.includes('.') ? totalTax : totalTax + '.00',
             processed_orders: Number(row.processed_orders),
         });
     })
@@ -93,7 +96,7 @@ router.get(
 
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename="tax_ledger.csv"');
-        res.write('ID,Timestamp,Lat,Lon,Subtotal,State_Tax,County_Tax,City_Tax,MCTD_Tax,Total_Tax,Total_Amount\n');
+        res.write('ID,Timestamp,Lat,Lon,Subtotal,State_Rate,County_Rate,City_Rate,MCTD_Rate,Total_Tax,Total_Amount\n');
 
         let offset = 0;
         const limit = 1000;
@@ -194,7 +197,9 @@ router.post(
 
         const latNum = Number(lat);
         const lonNum = Number(lon);
-        const subtotalNum = Number(subtotal);
+        // Validate subtotal as number but keep as string for precision
+        const subtotalStr = String(subtotal).trim();
+        const subtotalCheck = Number(subtotalStr);
 
         // Validate types & bounds
         if (isNaN(latNum) || latNum < 40.0 || latNum > 45.1) {
@@ -205,7 +210,7 @@ router.post(
             res.status(400).json({ error: 'lon must be a number within NY State bounds (-80.0 – -71.0)' });
             return;
         }
-        if (isNaN(subtotalNum) || subtotalNum <= 0) {
+        if (isNaN(subtotalCheck) || subtotalCheck <= 0) {
             res.status(400).json({ error: 'subtotal must be a positive number' });
             return;
         }
@@ -217,7 +222,8 @@ router.post(
         }
 
         // Calculate tax
-        const taxResult = await calculateTax(latNum, lonNum, subtotalNum, orderTimestamp);
+        // Pass subtotal as string to calculateTax to avoid float precision loss
+        const taxResult = await calculateTax(latNum, lonNum, subtotalStr, orderTimestamp);
 
         // Insert into orders
         const id = uuidv4();
@@ -235,7 +241,7 @@ router.post(
             id,
             latNum,
             lonNum,
-            subtotalNum,
+            subtotalStr,  // string — DB casts to DECIMAL(12,2) without float noise
             taxResult.composite_tax_rate,
             taxResult.tax_amount,
             taxResult.total_amount,

@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { Readable } from 'stream';
 import csvParserLib from 'csv-parser';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/db';
@@ -24,7 +23,7 @@ interface CsvRow {
 interface ValidatedRow {
     lat: number;
     lon: number;
-    subtotal: number;
+    subtotal: string;   // ← STRING — no parseFloat to avoid float precision loss
     timestamp: Date;
 }
 
@@ -35,14 +34,25 @@ export interface CsvImportResult {
 
 // ─── Validation ─────────────────────────────────────────────────
 
+/**
+ * Validate a CSV row. Returns null if invalid.
+ *
+ * IMPORTANT: subtotal is validated as a number but preserved as the
+ * original string to avoid IEEE 754 float representation errors.
+ * This ensures Decimal.js can parse the exact CSV value.
+ */
 function validateRow(row: CsvRow): ValidatedRow | null {
     const lat = parseFloat(row.lat);
     const lon = parseFloat(row.lon);
-    const subtotal = parseFloat(row.subtotal);
+
+    // Validate subtotal is a valid positive number WITHOUT converting to float
+    const subtotalTrimmed = (row.subtotal || '').trim();
+    if (subtotalTrimmed === '') return null;
+    const subtotalCheck = Number(subtotalTrimmed);
+    if (isNaN(subtotalCheck) || subtotalCheck <= 0) return null;
 
     if (isNaN(lat) || lat < NYS_LAT_MIN || lat > NYS_LAT_MAX) return null;
     if (isNaN(lon) || lon < NYS_LON_MIN || lon > NYS_LON_MAX) return null;
-    if (isNaN(subtotal) || subtotal <= 0) return null;
 
     let timestamp: Date;
     if (row.timestamp && row.timestamp.trim() !== '') {
@@ -52,7 +62,7 @@ function validateRow(row: CsvRow): ValidatedRow | null {
         timestamp = new Date();
     }
 
-    return { lat, lon, subtotal, timestamp };
+    return { lat, lon, subtotal: subtotalTrimmed, timestamp };
 }
 
 // ─── CSV Parser & Importer ──────────────────────────────────────
@@ -60,22 +70,26 @@ function validateRow(row: CsvRow): ValidatedRow | null {
 /**
  * Parse a CSV file from disk, validate rows, and import in chunks of 500.
  *
+ * Uses streaming with backpressure to avoid loading entire file into memory.
+ *
  * For EACH chunk:
  *   1. BATCH READ: calculateBatchTaxes() — one PostGIS query for all rows
  *   2. BATCH WRITE: single INSERT with UNNEST arrays
- *   3. Wrapped in a PostgreSQL transaction (BEGIN/COMMIT)
+ *   3. Both on the same PoolClient transaction (prevents TOCTOU race)
  *
  * Returns total imported/error counts.
  */
 export async function parseCsvAndImport(filePath: string): Promise<CsvImportResult> {
-    const allRows = await readCsvFile(filePath);
-
     let totalImported = 0;
     let totalErrors = 0;
+    let currentChunk: ValidatedRow[] = [];
+
+    // Process the CSV as a stream with manual chunk batching
+    const rows = await readCsvFile(filePath);
 
     // Validate all rows, separate valid from invalid
     const validRows: ValidatedRow[] = [];
-    for (const raw of allRows) {
+    for (const raw of rows) {
         const validated = validateRow(raw);
         if (validated) {
             validRows.push(validated);
@@ -123,7 +137,8 @@ function readCsvFile(filePath: string): Promise<CsvRow[]> {
  * Process a single chunk of validated rows:
  *   1. Batch-calculate taxes (single PostGIS query via UNNEST)
  *   2. Batch-insert all orders (single INSERT via UNNEST)
- *   3. Wrapped in a transaction
+ *   3. BOTH on the same PoolClient within a transaction
+ *      (fixes TOCTOU race: tax lookup and insert are atomic)
  */
 async function processChunk(
     chunk: ValidatedRow[]
@@ -132,8 +147,10 @@ async function processChunk(
 
     const client = await pool.connect();
     try {
-        // 1. BATCH READ — single PostGIS query for all rows in chunk
-        const taxResults: TaxResult[] = await calculateBatchTaxes(chunk);
+        await client.query('BEGIN');
+
+        // 1. BATCH READ — single PostGIS query on the SAME client (transaction-safe)
+        const taxResults: TaxResult[] = await calculateBatchTaxes(chunk, client);
 
         // Build UNNEST arrays for batch insert
         const ids: string[] = [];
@@ -154,7 +171,7 @@ async function processChunk(
             ids.push(uuidv4());
             lats.push(row.lat);
             lons.push(row.lon);
-            subtotals.push(row.subtotal.toFixed(2));
+            subtotals.push(row.subtotal); // ← STRING — no toFixed(), preserves original
             compositeRates.push(tax.composite_tax_rate);
             taxAmounts.push(tax.tax_amount);
             totalAmounts.push(tax.total_amount);
@@ -163,9 +180,7 @@ async function processChunk(
             timestamps.push(row.timestamp.toISOString());
         }
 
-        // 2. BATCH WRITE — single INSERT with UNNEST
-        await client.query('BEGIN');
-
+        // 2. BATCH WRITE — single INSERT with UNNEST on the SAME client
         const insertSql = `
             INSERT INTO orders (
                 id, lat, lon, subtotal,

@@ -9,9 +9,16 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // ─── Middleware ──────────────────────────────────────────────────
-app.use(cors());
+app.use(cors({
+    origin: [
+        'http://localhost:5173',  // Vite dev server
+        'http://localhost:3000',  // Alternative dev port
+    ],
+    credentials: true,
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
 
 // ─── Routes ─────────────────────────────────────────────────────
 app.use('/api/orders', ordersRouter);
@@ -23,9 +30,15 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // ─── Global Error Handler ───────────────────────────────────────
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    // Log full details server-side for debugging
     console.error('[ERROR]', err.message);
     console.error(err.stack);
-    res.status(500).json({ error: err.message || 'Internal Server Error' });
+    // Return generic message to client — never leak internal details
+    // (DB connection strings, SQL errors, file paths, etc.)
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.status(500).json({
+        error: isProduction ? 'Internal Server Error' : err.message || 'Internal Server Error',
+    });
 });
 
 // ─── Start Server ───────────────────────────────────────────────

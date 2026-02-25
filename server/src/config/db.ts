@@ -8,8 +8,9 @@ const pool = new Pool({
 });
 
 pool.on('error', (err: Error) => {
-    console.error('Unexpected error on idle client', err);
-    process.exit(-1);
+    // Log but do NOT crash — transient DB errors should not kill the server.
+    // The pool will automatically attempt to reconnect on next query.
+    console.error('[DB POOL ERROR] Unexpected error on idle client:', err.message);
 });
 
 export async function query<T extends QueryResultRow = QueryResultRow>(

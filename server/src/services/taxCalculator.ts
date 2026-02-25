@@ -1,5 +1,6 @@
 import { query } from '../config/db';
 import { toDecimal, sumRates, calcTax, formatRate, Decimal } from '../utils/precision';
+import { PoolClient } from 'pg';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -37,12 +38,15 @@ interface JurisdictionRow {
 /**
  * Given an array of matched jurisdiction rows (for a single point),
  * build the breakdown, jurisdictions_applied, and compute tax.
+ *
+ * IMPORTANT: subtotal is accepted as string|number to allow
+ * precise string passthrough from CSV/API without float conversion.
  */
 function buildTaxResult(
     rows: JurisdictionRow[],
     subtotal: number | string
 ): TaxResult {
-    // Extract first match of each type
+    // Extract first match of each type (deterministic: ORDER BY type, name)
     let stateRate: Decimal | null = null;
     let countyRate: Decimal | null = null;
     let cityRate: Decimal | null = null;
@@ -52,26 +56,35 @@ function buildTaxResult(
 
     for (const row of rows) {
         const rate = toDecimal(row.rate);
-        jurisdictions_applied.push({
-            id: row.id,
-            name: row.name,
-            type: row.type,
-            rate: formatRate(rate),
-        });
+        let applied = false;
 
         switch (row.type) {
             case 'state':
-                if (stateRate === null) stateRate = rate;
+                if (stateRate === null) { stateRate = rate; applied = true; }
                 break;
             case 'county':
-                if (countyRate === null) countyRate = rate;
+                if (countyRate === null) { countyRate = rate; applied = true; }
                 break;
             case 'city':
-                if (cityRate === null) cityRate = rate;
+                if (cityRate === null) { cityRate = rate; applied = true; }
                 break;
             case 'special':
-                if (specialRate === null) specialRate = rate;
+                if (specialRate === null) {
+                    specialRate = rate;
+                } else {
+                    specialRate = specialRate.plus(rate);
+                }
+                applied = true; // All special districts are applied cumulatively
                 break;
+        }
+
+        if (applied) {
+            jurisdictions_applied.push({
+                id: row.id,
+                name: row.name,
+                type: row.type,
+                rate: formatRate(rate),
+            });
         }
     }
 
@@ -107,11 +120,13 @@ function buildTaxResult(
 /**
  * Calculate tax for a single order.
  * Uses PostGIS ST_Intersects to find all jurisdictions containing the point.
+ *
+ * @param subtotal — accepts string to preserve precision from API input
  */
 export async function calculateTax(
     lat: number,
     lon: number,
-    subtotal: number,
+    subtotal: number | string,
     timestamp: Date
 ): Promise<TaxResult> {
     const dateStr = timestamp.toISOString().split('T')[0];
@@ -123,7 +138,7 @@ export async function calculateTax(
         WHERE ST_Intersects(j.geom, ST_SetSRID(ST_MakePoint($1, $2), 4326))
           AND tr.valid_from <= $3::date
           AND (tr.valid_to IS NULL OR tr.valid_to > $3::date)
-        ORDER BY j.type;
+        ORDER BY j.type, j.name;
     `;
 
     const result = await query<JurisdictionRow>(sql, [lon, lat, dateStr]);
@@ -137,10 +152,15 @@ export async function calculateTax(
  * using UNNEST to pass arrays of points. This avoids the N+1 query problem
  * that would occur if we called calculateTax() in a loop.
  *
+ * @param client — optional PoolClient for transactional consistency.
+ *                 When provided, the tax lookup runs on the same DB connection
+ *                 as the calling transaction, preventing TOCTOU race conditions.
+ *
  * Returns TaxResult[] in the same order as the input batch.
  */
 export async function calculateBatchTaxes(
-    batch: { lat: number; lon: number; subtotal: number; timestamp: Date }[]
+    batch: { lat: number; lon: number; subtotal: number | string; timestamp: Date }[],
+    client?: PoolClient
 ): Promise<TaxResult[]> {
     if (batch.length === 0) return [];
 
@@ -158,6 +178,7 @@ export async function calculateBatchTaxes(
     }
 
     // Single query: finds all jurisdiction matches for ALL points at once
+    // ORDER BY pts.idx, j.type, j.name — deterministic tie-breaking
     const sql = `
         SELECT
             pts.idx,
@@ -173,13 +194,16 @@ export async function calculateBatchTaxes(
             ON tr.jurisdiction_id = j.id
             AND tr.valid_from <= pts.ts
             AND (tr.valid_to IS NULL OR tr.valid_to > pts.ts)
-        ORDER BY pts.idx, j.type;
+        ORDER BY pts.idx, j.type, j.name;
     `;
 
-    const result = await query<JurisdictionRow & { idx: number }>(
-        sql,
-        [idxArr, lonArr, latArr, dateArr]
-    );
+    // Use the provided client if available (for transactional consistency),
+    // otherwise fall back to pool query
+    const queryFn = client
+        ? (text: string, params: unknown[]) => client.query<JurisdictionRow & { idx: number }>(text, params)
+        : (text: string, params: unknown[]) => query<JurisdictionRow & { idx: number }>(text, params);
+
+    const result = await queryFn(sql, [idxArr, lonArr, latArr, dateArr]);
 
     // Group results by index
     const grouped = new Map<number, JurisdictionRow[]>();

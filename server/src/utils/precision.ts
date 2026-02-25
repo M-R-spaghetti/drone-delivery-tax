@@ -1,8 +1,8 @@
 import Decimal from 'decimal.js';
 
 // ─── Global Configuration ───────────────────────────────────────
-// Banker's Rounding (ROUND_HALF_EVEN) — applied ONCE at the end
-Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_EVEN });
+// Commercial Rounding (ROUND_HALF_UP) as required by NYS Tax Law
+Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 /**
  * Convert a string or number to a Decimal instance.
@@ -28,7 +28,7 @@ export function sumRates(...rates: (string | null | undefined)[]): Decimal {
 /**
  * Calculate tax_amount and total_amount from subtotal and composite rate.
  *
- * Tax is rounded ONCE to 2dp using Banker's Rounding (ROUND_HALF_EVEN).
+ * Tax is rounded ONCE to 2dp using Commercial Rounding (ROUND_HALF_UP).
  * total = subtotal + tax (no additional rounding).
  *
  * Returns both as strings with exactly 2 decimal places.
@@ -38,7 +38,7 @@ export function calcTax(
     compositeRate: Decimal
 ): { tax_amount: string; total_amount: string } {
     const sub = new Decimal(subtotal);
-    const tax = sub.times(compositeRate).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN);
+    const tax = sub.times(compositeRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
     const total = sub.plus(tax);
     return {
         tax_amount: tax.toFixed(2),
