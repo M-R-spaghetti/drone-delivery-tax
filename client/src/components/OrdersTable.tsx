@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchOrders, type OrdersParams, type Order } from '../api/orders';
+import { fetchOrders, fetchSummary, type OrdersParams, type Order } from '../api/orders';
 import TaxBreakdownPopover from './TaxBreakdownPopover';
-import { Calendar as CalendarIcon, Inbox, Loader2, ChevronLeft, ChevronRight, AlertOctagon } from 'lucide-react';
+import { Calendar as CalendarIcon, Inbox, Loader2, ChevronLeft, ChevronRight, AlertOctagon, Download } from 'lucide-react';
 
 export default function OrdersTable() {
     const [page, setPage] = useState(1);
@@ -21,6 +21,18 @@ export default function OrdersTable() {
         queryKey: ['orders', params],
         queryFn: () => fetchOrders(params),
     });
+
+    const { data: summaryData, isLoading: isSummaryLoading } = useQuery({
+        queryKey: ['orders-summary', { dateFrom: params.dateFrom, dateTo: params.dateTo }],
+        queryFn: () => fetchSummary({ dateFrom: params.dateFrom, dateTo: params.dateTo }),
+    });
+
+    const handleExport = () => {
+        const searchParams = new URLSearchParams();
+        if (dateFrom) searchParams.set('dateFrom', dateFrom);
+        if (dateTo) searchParams.set('dateTo', dateTo);
+        window.location.href = `/api/orders/export?${searchParams.toString()}`;
+    };
 
     const formatDate = (ts: string) => {
         return new Date(ts).toLocaleString('en-US', {
@@ -82,6 +94,12 @@ export default function OrdersTable() {
 
                 {/* Filters */}
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleExport}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-300 hover:text-white transition-all bg-white/[0.04] hover:bg-white/10 rounded-lg border border-white/5 uppercase tracking-wider active:scale-95"
+                    >
+                        <Download className="w-3.5 h-3.5" /> Export Ledger
+                    </button>
                     <div className="flex items-center bg-[#121214] border border-white/10 rounded-lg p-1 shadow-inner">
                         <div className="flex items-center gap-2 px-3 border-r border-white/10">
                             <CalendarIcon className="w-4 h-4 text-zinc-500" />
@@ -110,6 +128,31 @@ export default function OrdersTable() {
                             Reset
                         </button>
                     )}
+                </div>
+            </div>
+
+            {/* CFO Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-[#121214] border border-white/10 rounded-xl p-5 shadow-lg relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-1">Total Sales</p>
+                    <div className="text-2xl font-semibold text-white tracking-tight flex items-center gap-2">
+                        {isSummaryLoading ? <Loader2 className="w-5 h-5 animate-spin text-zinc-600" /> : formatMoney(summaryData?.total_sales || '0')}
+                    </div>
+                </div>
+                <div className="bg-[#121214] border border-white/10 rounded-xl p-5 shadow-lg relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-1">Total Tax Liability</p>
+                    <div className="text-2xl font-semibold text-white tracking-tight flex items-center gap-2">
+                        {isSummaryLoading ? <Loader2 className="w-5 h-5 animate-spin text-zinc-600" /> : formatMoney(summaryData?.total_tax || '0')}
+                    </div>
+                </div>
+                <div className="bg-[#121214] border border-white/10 rounded-xl p-5 shadow-lg relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-1">Processed Orders</p>
+                    <div className="text-2xl font-semibold text-white tracking-tight flex items-center gap-2">
+                        {isSummaryLoading ? <Loader2 className="w-5 h-5 animate-spin text-zinc-600" /> : (summaryData?.processed_orders?.toLocaleString() || '0')}
+                    </div>
                 </div>
             </div>
 
@@ -165,9 +208,16 @@ export default function OrdersTable() {
                                     className="group hover:bg-white/[0.02] transition-colors duration-200"
                                 >
                                     <td className="px-6 py-3.5">
-                                        <span className="font-mono text-xs text-zinc-500 group-hover:text-zinc-300 transition-colors">
-                                            {order.id.slice(0, 8)}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono text-xs text-zinc-500 group-hover:text-zinc-300 transition-colors">
+                                                {order.id.slice(0, 8)}
+                                            </span>
+                                            {order.source === 'manual' && (
+                                                <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider leading-none">
+                                                    MANUAL
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-3.5 text-xs text-zinc-400">
                                         {formatDate(order.timestamp)}
@@ -235,8 +285,8 @@ export default function OrdersTable() {
                                             key={pageNum}
                                             onClick={() => setPage(pageNum)}
                                             className={`w-7 h-7 rounded-md text-xs font-mono font-medium transition-all ${page === pageNum
-                                                    ? 'bg-white/10 text-white'
-                                                    : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
+                                                ? 'bg-white/10 text-white'
+                                                : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
                                                 }`}
                                         >
                                             {pageNum}

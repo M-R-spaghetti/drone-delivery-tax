@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import CsvUpload from './components/CsvUpload';
 import ManualOrderModal from './components/ManualOrderModal';
 import OrdersTable from './components/OrdersTable';

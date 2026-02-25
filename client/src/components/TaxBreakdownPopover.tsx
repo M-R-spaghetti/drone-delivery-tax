@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Order } from '../api/orders';
 import { Receipt } from 'lucide-react';
 
@@ -40,8 +40,8 @@ export default function TaxBreakdownPopover({ breakdown, jurisdictions }: Props)
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={`p-1.5 rounded-md transition-all duration-200 outline-none ${isOpen
-                        ? 'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
-                        : 'text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300'
+                    ? 'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
+                    : 'text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300'
                     }`}
                 title="View Receipt"
             >

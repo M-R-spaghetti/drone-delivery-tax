@@ -22,6 +22,13 @@ export interface Order {
         rate: string;
     }[];
     created_at: string;
+    source?: string;
+}
+
+export interface OrdersSummaryResponse {
+    total_sales: string;
+    total_tax: string;
+    processed_orders: number;
 }
 
 export interface OrdersResponse {
@@ -58,6 +65,21 @@ export async function fetchOrders(params: OrdersParams = {}): Promise<OrdersResp
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Failed to fetch orders: ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function fetchSummary(params: OrdersParams = {}): Promise<OrdersSummaryResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.dateFrom) searchParams.set('dateFrom', params.dateFrom);
+    if (params.dateTo) searchParams.set('dateTo', params.dateTo);
+    if (params.minRate !== undefined) searchParams.set('minRate', String(params.minRate));
+    if (params.maxRate !== undefined) searchParams.set('maxRate', String(params.maxRate));
+
+    const res = await fetch(`${API_BASE}/orders/summary?${searchParams}`);
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Failed to fetch summary: ${res.status}`);
     }
     return res.json();
 }

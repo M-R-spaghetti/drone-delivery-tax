@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import { ReactNode } from 'react';
 import { LayoutDashboard, UploadCloud, Hexagon, Plus } from 'lucide-react';
 
 interface LayoutProps {
@@ -30,8 +30,8 @@ export default function Layout({ children, activeTab, setActiveTab, onNewOrder }
                     <button
                         onClick={() => setActiveTab('orders')}
                         className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out active:scale-95 ${activeTab === 'orders'
-                                ? 'bg-white/[0.04] text-white'
-                                : 'text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300'
+                            ? 'bg-white/[0.04] text-white'
+                            : 'text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300'
                             }`}
                     >
                         {activeTab === 'orders' && (
@@ -44,8 +44,8 @@ export default function Layout({ children, activeTab, setActiveTab, onNewOrder }
                     <button
                         onClick={() => setActiveTab('upload')}
                         className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out active:scale-95 ${activeTab === 'upload'
-                                ? 'bg-white/[0.04] text-white'
-                                : 'text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300'
+                            ? 'bg-white/[0.04] text-white'
+                            : 'text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300'
                             }`}
                     >
                         {activeTab === 'upload' && (

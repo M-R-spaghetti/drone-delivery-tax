@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { importCsv } from '../api/orders';
-import { UploadCloud, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function CsvUpload() {
     const queryClient = useQueryClient();
@@ -77,10 +77,10 @@ export default function CsvUpload() {
                     onDragLeave={onDragLeave}
                     onClick={() => !mutation.isPending && fileRef.current?.click()}
                     className={`relative z-10 w-full rounded-2xl p-12 text-center transition-all duration-300 ease-out cursor-pointer overflow-hidden backdrop-blur-xl ${mutation.isPending
-                            ? 'border border-white/5 bg-white/[0.01] cursor-not-allowed'
-                            : isDragOver
-                                ? 'border border-blue-500/50 bg-blue-500/[0.05] shadow-[0_0_30px_rgba(59,130,246,0.1)] scale-[1.02]'
-                                : 'border border-dashed border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/20'
+                        ? 'border border-white/5 bg-white/[0.01] cursor-not-allowed'
+                        : isDragOver
+                            ? 'border border-blue-500/50 bg-blue-500/[0.05] shadow-[0_0_30px_rgba(59,130,246,0.1)] scale-[1.02]'
+                            : 'border border-dashed border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/20'
                         }`}
                 >
                     <input
