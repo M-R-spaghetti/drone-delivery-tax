@@ -6,17 +6,15 @@ export default {
     ],
     theme: {
         extend: {
-            fontFamily: {
-                sans: ['Inter', 'system-ui', 'sans-serif'],
-            },
             colors: {
-                brand: {
-                    50: '#f0f9ff',
-                    100: '#e0f2fe',
-                    500: '#0ea5e9',
-                    600: '#0284c7',
-                    900: '#0c4a6e',
-                }
+                'pure-black': '#000000',
+                'pure-red': '#E50000',
+                'zinc-950': '#09090b',
+                'zinc-900': '#18181b',
+            },
+            fontFamily: {
+                sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+                mono: ['Space Mono', 'ui-monospace', 'SFMono-Regular'],
             },
             animation: {
                 'slide-up': 'slideUp 0.3s ease-out',

@@ -23,6 +23,9 @@ app.use(express.urlencoded({ extended: true }));
 // ─── Routes ─────────────────────────────────────────────────────
 app.use('/api/orders', ordersRouter);
 
+import statsRouter from './routes/stats';
+app.use('/api/stats', statsRouter);
+
 // ─── Health Check ───────────────────────────────────────────────
 app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });

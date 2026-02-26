@@ -3,8 +3,8 @@ import { LayoutDashboard, UploadCloud, Hexagon, Plus } from 'lucide-react';
 
 interface LayoutProps {
     children: ReactNode;
-    activeTab: 'orders' | 'upload';
-    setActiveTab: (tab: 'orders' | 'upload') => void;
+    activeTab: 'orders' | 'upload' | 'stats';
+    setActiveTab: (tab: 'orders' | 'upload' | 'stats') => void;
     onNewOrder: () => void;
 }
 
@@ -28,6 +28,20 @@ export default function Layout({ children, activeTab, setActiveTab, onNewOrder }
                 {/* Nav Links */}
                 <nav className="flex-1 px-4 py-6 flex flex-col gap-1.5">
                     <button
+                        onClick={() => setActiveTab('stats')}
+                        className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out active:scale-95 ${activeTab === 'stats'
+                            ? 'bg-white/[0.04] text-white'
+                            : 'text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300'
+                            }`}
+                    >
+                        {activeTab === 'stats' && (
+                            <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                        )}
+                        <LayoutDashboard className={`w-4 h-4 transition-colors ${activeTab === 'stats' ? 'text-blue-400' : 'text-zinc-500 group-hover:text-zinc-400'}`} />
+                        Analytics Dashboard
+                    </button>
+
+                    <button
                         onClick={() => setActiveTab('orders')}
                         className={`group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out active:scale-95 ${activeTab === 'orders'
                             ? 'bg-white/[0.04] text-white'
@@ -37,8 +51,8 @@ export default function Layout({ children, activeTab, setActiveTab, onNewOrder }
                         {activeTab === 'orders' && (
                             <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
                         )}
-                        <LayoutDashboard className={`w-4 h-4 transition-colors ${activeTab === 'orders' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-400'}`} />
-                        Dashboard
+                        <Hexagon className={`w-4 h-4 transition-colors ${activeTab === 'orders' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-400'}`} />
+                        Ledger
                     </button>
 
                     <button
@@ -77,7 +91,9 @@ export default function Layout({ children, activeTab, setActiveTab, onNewOrder }
                 {/* Header */}
                 <header className="h-16 flex items-center px-8 border-b border-white/[0.05] bg-[#09090b]/80 backdrop-blur-md sticky top-0 z-10">
                     <h2 className="text-sm font-medium text-zinc-400 tracking-tight">
-                        {activeTab === 'orders' ? 'Transactions / Ledger' : 'Data Ingestion / CSV'}
+                        {activeTab === 'stats' ? 'Analytics / Overview' :
+                            activeTab === 'orders' ? 'Transactions / Ledger' :
+                                'Data Ingestion / CSV'}
                     </h2>
                 </header>
 
