@@ -46,6 +46,15 @@ export interface OrdersParams {
     dateTo?: string;
     minRate?: number;
     maxRate?: number;
+    searchText?: string;
+    taxVal?: number;
+    taxOp?: string;
+    amountVal?: number;
+    amountOp?: string;
+    amountVal2?: number;
+    taxVal2?: number;
+    sourceFilter?: string;
+    idSearch?: string;
 }
 
 // ─── API Functions ──────────────────────────────────────────────
@@ -60,6 +69,15 @@ export async function fetchOrders(params: OrdersParams = {}): Promise<OrdersResp
     if (params.dateTo) searchParams.set('dateTo', params.dateTo);
     if (params.minRate !== undefined) searchParams.set('minRate', String(params.minRate));
     if (params.maxRate !== undefined) searchParams.set('maxRate', String(params.maxRate));
+    if (params.searchText) searchParams.set('searchText', params.searchText);
+    if (params.taxVal !== undefined) searchParams.set('taxVal', String(params.taxVal));
+    if (params.taxOp) searchParams.set('taxOp', params.taxOp);
+    if (params.amountVal !== undefined) searchParams.set('amountVal', String(params.amountVal));
+    if (params.amountOp) searchParams.set('amountOp', params.amountOp);
+    if (params.amountVal2 !== undefined) searchParams.set('amountVal2', String(params.amountVal2));
+    if (params.taxVal2 !== undefined) searchParams.set('taxVal2', String(params.taxVal2));
+    if (params.sourceFilter) searchParams.set('sourceFilter', params.sourceFilter);
+    if (params.idSearch) searchParams.set('idSearch', params.idSearch);
 
     const res = await fetch(`${API_BASE}/orders?${searchParams}`);
     if (!res.ok) {
@@ -75,6 +93,15 @@ export async function fetchSummary(params: OrdersParams = {}): Promise<OrdersSum
     if (params.dateTo) searchParams.set('dateTo', params.dateTo);
     if (params.minRate !== undefined) searchParams.set('minRate', String(params.minRate));
     if (params.maxRate !== undefined) searchParams.set('maxRate', String(params.maxRate));
+    if (params.searchText) searchParams.set('searchText', params.searchText);
+    if (params.taxVal !== undefined) searchParams.set('taxVal', String(params.taxVal));
+    if (params.taxOp) searchParams.set('taxOp', params.taxOp);
+    if (params.amountVal !== undefined) searchParams.set('amountVal', String(params.amountVal));
+    if (params.amountOp) searchParams.set('amountOp', params.amountOp);
+    if (params.amountVal2 !== undefined) searchParams.set('amountVal2', String(params.amountVal2));
+    if (params.taxVal2 !== undefined) searchParams.set('taxVal2', String(params.taxVal2));
+    if (params.sourceFilter) searchParams.set('sourceFilter', params.sourceFilter);
+    if (params.idSearch) searchParams.set('idSearch', params.idSearch);
 
     const res = await fetch(`${API_BASE}/orders/summary?${searchParams}`);
     if (!res.ok) {

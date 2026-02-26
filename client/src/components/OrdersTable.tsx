@@ -3,18 +3,31 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchOrders, fetchSummary, type OrdersParams, type Order } from '../api/orders';
 import TaxBreakdownPopover from './TaxBreakdownPopover';
 import { Calendar as CalendarIcon, Inbox, Loader2, ChevronLeft, ChevronRight, AlertOctagon, Download } from 'lucide-react';
+import SmartOmniSearch from './SmartOmniSearch';
+import { type ParsedIntent } from '../lib/searchParser';
+import { useCallback } from 'react';
 
 export default function OrdersTable() {
     const [page, setPage] = useState(1);
     const [limit] = useState(20);
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
+    const [searchFilters, setSearchFilters] = useState<ParsedIntent['filters']>({});
 
     const params: OrdersParams = {
         page,
         limit,
-        dateFrom: dateFrom || undefined,
+        dateFrom: dateFrom || searchFilters.date || undefined,
         dateTo: dateTo || undefined,
+        searchText: searchFilters.text,
+        taxVal: searchFilters.tax?.value,
+        taxOp: searchFilters.tax?.operator,
+        amountVal: searchFilters.amount?.value,
+        amountOp: searchFilters.amount?.operator,
+        amountVal2: (searchFilters as any).amountMax,
+        taxVal2: (searchFilters as any).taxMax,
+        sourceFilter: (searchFilters as any).source,
+        idSearch: (searchFilters as any).idSearch,
     };
 
     const { data, isLoading, isError, error } = useQuery({
@@ -26,6 +39,11 @@ export default function OrdersTable() {
         queryKey: ['orders-summary', { dateFrom: params.dateFrom, dateTo: params.dateTo }],
         queryFn: () => fetchSummary({ dateFrom: params.dateFrom, dateTo: params.dateTo }),
     });
+
+    const handleSearch = useCallback((filters: ParsedIntent['filters']) => {
+        setSearchFilters(filters);
+        setPage(1); // reset page on search
+    }, []);
 
     const handleExport = () => {
         const searchParams = new URLSearchParams();
@@ -156,6 +174,8 @@ export default function OrdersTable() {
                 </div>
             </div>
 
+            <SmartOmniSearch onSearch={handleSearch} />
+
             {/* Table wrapper */}
             <div className="flex-1 bg-[#09090b] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col relative z-0">
                 <div className="overflow-x-auto flex-1 relative">
@@ -186,7 +206,7 @@ export default function OrdersTable() {
                                 </tr>
                             )}
 
-                            {data && data.data.length === 0 && (
+                            {data && data.data.length === 0 && !isLoading && (
                                 <tr>
                                     <td colSpan={8} className="px-6 py-32 text-center">
                                         <div className="flex flex-col items-center gap-4">

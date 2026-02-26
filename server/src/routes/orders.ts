@@ -31,6 +31,15 @@ function buildFilters(req: Request) {
     const dateTo = (req.query.dateTo as string) || undefined;
     const minRate = req.query.minRate !== undefined ? parseFloat(req.query.minRate as string) : undefined;
     const maxRate = req.query.maxRate !== undefined ? parseFloat(req.query.maxRate as string) : undefined;
+    const searchText = req.query.searchText as string;
+    const taxVal = req.query.taxVal !== undefined ? parseFloat(req.query.taxVal as string) : undefined;
+    const taxOp = req.query.taxOp as string;
+    const amountVal = req.query.amountVal !== undefined ? parseFloat(req.query.amountVal as string) : undefined;
+    const amountOp = req.query.amountOp as string;
+    const amountVal2 = req.query.amountVal2 !== undefined ? parseFloat(req.query.amountVal2 as string) : undefined;
+    const taxVal2 = req.query.taxVal2 !== undefined ? parseFloat(req.query.taxVal2 as string) : undefined;
+    const sourceFilter = req.query.sourceFilter as string;
+    const idSearch = req.query.idSearch as string;
 
     const conditions: string[] = [];
     const values: unknown[] = [];
@@ -54,6 +63,61 @@ function buildFilters(req: Request) {
     if (maxRate !== undefined && !isNaN(maxRate)) {
         conditions.push(`composite_tax_rate <= $${paramIdx}`);
         values.push(maxRate);
+        paramIdx++;
+    }
+
+    // OmniSearch Dynamic Filters
+    if (searchText) {
+        conditions.push(`(id::text ILIKE $${paramIdx} OR jurisdictions_applied::text ILIKE $${paramIdx})`);
+        values.push(`%${searchText}%`);
+        paramIdx++;
+    }
+    if (taxVal !== undefined && !isNaN(taxVal) && taxOp) {
+        if (taxOp === '=') {
+            conditions.push(`ABS(composite_tax_rate - $${paramIdx}) < 0.0001`);
+            values.push(taxVal);
+        } else {
+            conditions.push(`composite_tax_rate ${taxOp} $${paramIdx}`);
+            values.push(taxVal);
+        }
+        paramIdx++;
+    }
+    if (amountVal !== undefined && !isNaN(amountVal) && amountOp) {
+        if (amountOp === '=') {
+            conditions.push(`ABS(total_amount - $${paramIdx}) < 0.01`);
+            values.push(amountVal);
+        } else {
+            conditions.push(`total_amount ${amountOp} $${paramIdx}`);
+            values.push(amountVal);
+        }
+        paramIdx++;
+    }
+
+    // BETWEEN support for amounts
+    if (amountVal2 !== undefined && !isNaN(amountVal2) && amountOp === '>=') {
+        conditions.push(`total_amount <= $${paramIdx}`);
+        values.push(amountVal2);
+        paramIdx++;
+    }
+
+    // BETWEEN support for tax
+    if (taxVal2 !== undefined && !isNaN(taxVal2)) {
+        conditions.push(`composite_tax_rate <= $${paramIdx}`);
+        values.push(taxVal2);
+        paramIdx++;
+    }
+
+    // Source filter
+    if (sourceFilter) {
+        conditions.push(`source = $${paramIdx}`);
+        values.push(sourceFilter);
+        paramIdx++;
+    }
+
+    // ID search
+    if (idSearch) {
+        conditions.push(`id::text ILIKE $${paramIdx}`);
+        values.push(`%${idSearch}%`);
         paramIdx++;
     }
 
@@ -139,6 +203,7 @@ router.get(
 router.get(
     '/',
     asyncHandler(async (req: Request, res: Response) => {
+        console.log("INCOMING QUERY PARAMS:", req.query);
         const page = Math.max(1, parseInt(req.query.page as string) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
         const offset = (page - 1) * limit;

@@ -1,75 +1,47 @@
-import React from 'react';
 import { motion } from 'framer-motion';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+import { cn } from '../lib/utils';
+import { ReactNode } from 'react';
 
 interface KPICardProps {
     title: string;
-    value: string | number;
+    value: ReactNode;
     subtitle?: string;
-    trend?: {
-        value: string;
-        isPositive: boolean;
-    };
-    className?: string;
+    trend?: string;
+    trendUp?: boolean;
     delay?: number;
+    className?: string;
+    highlight?: boolean;
 }
 
-export const KPICard: React.FC<KPICardProps> = ({
-    title,
-    value,
-    subtitle,
-    trend,
-    className,
-    delay = 0
-}) => {
+export default function KPICard({ title, value, subtitle, trend, trendUp, delay = 0, className, highlight }: KPICardProps) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-                "relative overflow-hidden group",
-                "bg-zinc-950/50 backdrop-blur-xl",
-                "border border-zinc-900",
-                "p-6 rounded-none",
-                "flex flex-col gap-2",
+                "bg-[#09090B]/80 border backdrop-blur-xl rounded-sm p-6 flex flex-col justify-between transition-colors duration-500",
+                highlight ? "border-[#E50000]/50 shadow-[0_0_15px_rgba(229,0,0,0.1)]" : "border-zinc-900",
                 className
             )}
         >
-            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-zinc-800 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-mono">
-                {title}
-            </span>
-
-            <div className="flex items-baseline gap-2">
-                <h2 className="text-3xl font-mono font-bold tracking-tight text-white tabular-nums">
-                    {value}
-                </h2>
+            <div className="flex justify-between items-start">
+                <h3 className="text-[#A1A1AA] font-sans text-xs tracking-widest uppercase">{title}</h3>
                 {trend && (
                     <span className={cn(
-                        "text-[10px] font-mono px-1.5 py-0.5 rounded-none border",
-                        trend.isPositive ? "text-white border-zinc-800 bg-zinc-900" : "text-pure-red border-pure-red/20 bg-pure-red/5"
+                        "font-mono text-[10px] px-2 py-0.5 border",
+                        trendUp ? "text-zinc-300 border-zinc-800 bg-zinc-900/50" : "text-[#E50000] border-[#E50000]/30 bg-[#E50000]/10"
                     )}>
-                        {trend.value}
+                        {trend}
                     </span>
                 )}
             </div>
-
-            {subtitle && (
-                <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider">
-                    {subtitle}
-                </p>
-            )}
-
-            <div className="absolute bottom-1 right-2 opacity-10 pointer-events-none">
-                <span className="text-[8px] font-mono uppercase tracking-tighter">SEC_TYPE_ALPHA</span>
+            <div className="mt-8">
+                <div className={cn("text-3xl font-mono tracking-tight", highlight ? "text-[#E50000]" : "text-[#FFFFFF]")}>
+                    {value}
+                </div>
+                {subtitle && <p className="text-zinc-500 font-mono text-[10px] mt-2 uppercase">{subtitle}</p>}
             </div>
         </motion.div>
     );
-};
+}

@@ -6,25 +6,15 @@ export default {
     ],
     theme: {
         extend: {
-            colors: {
-                'pure-black': '#000000',
-                'pure-red': '#E50000',
-                'zinc-950': '#09090b',
-                'zinc-900': '#18181b',
-            },
             fontFamily: {
-                sans: ['Inter', 'ui-sans-serif', 'system-ui'],
-                mono: ['Space Mono', 'ui-monospace', 'SFMono-Regular'],
+                sans: ['Inter', 'system-ui', 'sans-serif'],
+                mono: ['"Space Mono"', 'monospace'],
             },
-            animation: {
-                'slide-up': 'slideUp 0.3s ease-out',
+            colors: {
+                'pure-red': '#E50000',
+                'pure-black': '#000000',
+                background: '#09090B',
             },
-            keyframes: {
-                slideUp: {
-                    '0%': { transform: 'translateY(10px)', opacity: 0 },
-                    '100%': { transform: 'translateY(0)', opacity: 1 },
-                }
-            }
         },
     },
     plugins: [],
