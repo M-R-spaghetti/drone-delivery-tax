@@ -3,10 +3,32 @@ dotenv.config();
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import ordersRouter from './routes/orders';
+import statsRouter from './routes/stats';
+import dashboardStatsRouter from './routes/dashboardStats';
+import adminRouter from './routes/admin';
+import { query as dbQuery } from './config/db';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
+
+// ─── Rate Limiting ──────────────────────────────────────────────
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,  // 1 minute
+    max: 200,             // 200 requests per minute per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' },
+});
+
+const adminLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,              // 20 requests per minute for admin ops
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many admin requests, please try again later.' },
+});
 
 // ─── Middleware ──────────────────────────────────────────────────
 app.use(cors({
@@ -19,12 +41,19 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-
 // ─── Routes ─────────────────────────────────────────────────────
-app.use('/api/orders', ordersRouter);
+app.use('/api/orders', apiLimiter, ordersRouter);
+app.use('/api/stats', apiLimiter, statsRouter);
+app.use('/api/dashboard-stats', apiLimiter, dashboardStatsRouter);
+app.use('/api/admin', adminLimiter, adminRouter);
 
-import statsRouter from './routes/stats';
-app.use('/api/stats', statsRouter);
+// ─── Create indexes on startup (idempotent) ────────────────────
+dbQuery('CREATE INDEX IF NOT EXISTS idx_orders_timestamp ON orders (timestamp)').catch((err: Error) =>
+    console.error('[INDEX] Failed to create idx_orders_timestamp:', err.message)
+);
+dbQuery('CREATE INDEX IF NOT EXISTS idx_orders_total_amount ON orders (total_amount)').catch((err: Error) =>
+    console.error('[INDEX] Failed to create idx_orders_total_amount:', err.message)
+);
 
 // ─── Health Check ───────────────────────────────────────────────
 app.get('/api/health', (_req: Request, res: Response) => {

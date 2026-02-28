@@ -4,8 +4,9 @@ import ManualOrderModal from './components/ManualOrderModal';
 import OrdersTable from './components/OrdersTable';
 import Layout from './components/Layout';
 import StatsDashboard from './components/stats/StatsDashboard';
+import AdminConsole from './components/AdminConsole';
 
-type Tab = 'stats' | 'orders' | 'upload';
+type Tab = 'stats' | 'orders' | 'upload' | 'admin';
 
 export default function App() {
     const [activeTab, setActiveTab] = useState<Tab>('stats');
@@ -20,6 +21,7 @@ export default function App() {
             {activeTab === 'stats' && <StatsDashboard />}
             {activeTab === 'orders' && <OrdersTable />}
             {activeTab === 'upload' && <CsvUpload />}
+            {activeTab === 'admin' && <AdminConsole />}
             <ManualOrderModal isOpen={showModal} onClose={() => setShowModal(false)} />
         </Layout>
     );

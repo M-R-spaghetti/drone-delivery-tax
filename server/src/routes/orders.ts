@@ -25,6 +25,9 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
+// Allowed comparison operators — whitelist to prevent SQL injection
+const ALLOWED_OPS = new Set(['>', '<', '>=', '<=', '=']);
+
 // Helper to build dynamic WHERE clause for orders
 function buildFilters(req: Request) {
     const dateFrom = (req.query.dateFrom as string) || undefined;
@@ -46,12 +49,12 @@ function buildFilters(req: Request) {
     let paramIdx = 1;
 
     if (dateFrom) {
-        conditions.push(`timestamp >= $${paramIdx}::timestamptz`);
+        conditions.push(`timestamp >= ($${paramIdx}::date)::timestamp AT TIME ZONE 'UTC'`);
         values.push(dateFrom);
         paramIdx++;
     }
     if (dateTo) {
-        conditions.push(`timestamp < ($${paramIdx}::date + interval '1 day')`);
+        conditions.push(`timestamp < (($${paramIdx}::date + interval '1 day'))::timestamp AT TIME ZONE 'UTC'`);
         values.push(dateTo);
         paramIdx++;
     }
@@ -73,6 +76,8 @@ function buildFilters(req: Request) {
         paramIdx++;
     }
     if (taxVal !== undefined && !isNaN(taxVal) && taxOp) {
+        // Validate operator against whitelist to prevent SQL injection
+        if (!ALLOWED_OPS.has(taxOp)) throw new Error('Invalid tax operator');
         if (taxOp === '=') {
             conditions.push(`ABS(composite_tax_rate - $${paramIdx}) < 0.0001`);
             values.push(taxVal);
@@ -83,6 +88,8 @@ function buildFilters(req: Request) {
         paramIdx++;
     }
     if (amountVal !== undefined && !isNaN(amountVal) && amountOp) {
+        // Validate operator against whitelist to prevent SQL injection
+        if (!ALLOWED_OPS.has(amountOp)) throw new Error('Invalid amount operator');
         if (amountOp === '=') {
             conditions.push(`ABS(total_amount - $${paramIdx}) < 0.01`);
             values.push(amountVal);
@@ -152,6 +159,15 @@ router.get(
     })
 );
 
+// Helper: escape a CSV field per RFC 4180
+function csvEscape(val: unknown): string {
+    const str = String(val ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+}
+
 // ─── GET /api/orders/export ─────────────────────────────────────
 router.get(
     '/export',
@@ -189,7 +205,8 @@ router.get(
                 const totalTax = row.tax_amount;
                 const totalAmount = row.total_amount;
 
-                res.write(`${id},${timestamp},${lat},${lon},${subtotal},${stateTax},${countyTax},${cityTax},${mctdTax},${totalTax},${totalAmount}\n`);
+                const fields = [id, timestamp, lat, lon, subtotal, stateTax, countyTax, cityTax, mctdTax, totalTax, totalAmount];
+                res.write(fields.map(csvEscape).join(',') + '\n');
             }
             offset += limit;
         }
@@ -203,9 +220,8 @@ router.get(
 router.get(
     '/',
     asyncHandler(async (req: Request, res: Response) => {
-        console.log("INCOMING QUERY PARAMS:", req.query);
         const page = Math.max(1, parseInt(req.query.page as string) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+        const limit = Math.min(30000, Math.max(1, parseInt(req.query.limit as string) || 20));
         const offset = (page - 1) * limit;
 
         const { whereClause, values, paramIdx } = buildFilters(req);
@@ -351,7 +367,7 @@ router.post(
 
         try {
             // Batch CSV processing: chunked UNNEST read + write
-            const result = await parseCsvAndImport(filePath);
+            const result = await parseCsvAndImport(filePath, req.file.originalname);
 
             const endTimeMs = Date.now();
             const timeTakenSec = ((endTimeMs - startTimeMs) / 1000).toFixed(2);

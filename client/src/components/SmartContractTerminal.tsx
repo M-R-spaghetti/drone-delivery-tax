@@ -84,7 +84,7 @@ const SmartContractTerminal = () => {
                         >
                             <span className="text-zinc-600">[{new Date().toISOString().split('T')[1].slice(0, 8)}]</span>
                             <span className="text-emerald-500/80 w-16 whitespace-nowrap overflow-hidden text-ellipsis">{log.txHash}</span>
-                            <span className="text-zinc-400 font-bold w-12 text-right">${log.amount.toFixed(2)}</span>
+                            <span className="text-zinc-400 font-bold w-12 text-right">{log.amount.toFixed(2)} $</span>
                             <span className="text-zinc-500">→</span>
                             <span className="text-zinc-300 w-32 whitespace-nowrap overflow-hidden text-ellipsis">{log.target}</span>
                             <span className={`ml-auto border px-1 ${log.status === 'VERIFIED' ? 'border-zinc-800 text-zinc-500 bg-zinc-900' :

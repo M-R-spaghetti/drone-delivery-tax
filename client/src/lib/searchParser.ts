@@ -15,13 +15,14 @@ export interface ParsedIntent {
     filters: {
         amount?: { operator: string; value: number };
         tax?: { operator: string; value: number };
-        date?: string;
+        dateFrom?: string;
+        dateTo?: string;
         text?: string;
     };
 }
 
 function parseAmount(val: string, filters: ParsedIntent['filters']) {
-    let str = val.toLowerCase();
+    const str = val.toLowerCase();
     let operator = '=';
     if (str.includes('>=')) operator = '>=';
     else if (str.includes('<=')) operator = '<=';
@@ -30,17 +31,18 @@ function parseAmount(val: string, filters: ParsedIntent['filters']) {
     else if (str.includes('over')) operator = '>';
     else if (str.includes('under')) operator = '<';
 
-    let numStr = str.replace(/[^0-9.]/g, '');
+    const numStr = str.replace(/[^0-9.]/g, '');
     if (numStr === '') return;
     let num = parseFloat(numStr);
-    if (str.includes('k')) num *= 1000;
-    if (str.includes('m')) num *= 1000000;
+    // Only apply k/m multiplier when it appears right after the number (e.g. "500k", "$2.5m")
+    if (/\d\s*k\b/.test(str)) num *= 1000;
+    if (/\d\s*m\b/.test(str)) num *= 1000000;
 
     filters.amount = { operator, value: num };
 }
 
 function parseTax(val: string, filters: ParsedIntent['filters']) {
-    let str = val.toLowerCase();
+    const str = val.toLowerCase();
     let operator = '=';
     if (str.includes('>=')) operator = '>=';
     else if (str.includes('<=')) operator = '<=';
@@ -49,9 +51,9 @@ function parseTax(val: string, filters: ParsedIntent['filters']) {
     else if (str.includes('over')) operator = '>';
     else if (str.includes('under')) operator = '<';
 
-    let numStr = str.replace(/[^0-9.]/g, '');
+    const numStr = str.replace(/[^0-9.]/g, '');
     if (numStr === '') return;
-    let num = parseFloat(numStr) / 100; // e.g. 4% -> 0.04
+    const num = parseFloat(numStr) / 100; // e.g. 4% -> 0.04
 
     filters.tax = { operator, value: num };
 }
@@ -138,7 +140,45 @@ export function parseSearchQuery(query: string): ParsedIntent {
     tokens.forEach(t => {
         if (t.type === 'amount') parseAmount(t.value, filters);
         else if (t.type === 'tax') parseTax(t.value, filters);
-        else if (t.type === 'date') filters.date = t.value.toLowerCase();
+        else if (t.type === 'date') {
+            const dateStr = t.value.toLowerCase();
+            const now = new Date();
+            if (dateStr.includes('today')) {
+                const today = now.toISOString().split('T')[0];
+                filters.dateFrom = today;
+                filters.dateTo = today;
+            } else if (dateStr.includes('yesterday')) {
+                const yest = new Date(now);
+                yest.setDate(yest.getDate() - 1);
+                const yesterday = yest.toISOString().split('T')[0];
+                filters.dateFrom = yesterday;
+                filters.dateTo = yesterday;
+            } else if (dateStr.includes('this week')) {
+                const weekStart = new Date(now);
+                weekStart.setDate(now.getDate() - now.getDay());
+                const weekEnd = new Date(now);
+                weekEnd.setDate(now.getDate() + (6 - now.getDay()));
+                filters.dateFrom = weekStart.toISOString().split('T')[0];
+                filters.dateTo = weekEnd.toISOString().split('T')[0];
+            } else if (dateStr.includes('this month')) {
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                filters.dateFrom = monthStart.toISOString().split('T')[0];
+                filters.dateTo = monthEnd.toISOString().split('T')[0];
+            } else {
+                // Try month names if matched
+                const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+                for (let i = 0; i < months.length; i++) {
+                    if (dateStr.includes(months[i])) {
+                        const monthStart = new Date(now.getFullYear(), i, 1);
+                        const monthEnd = new Date(now.getFullYear(), i + 1, 0);
+                        filters.dateFrom = monthStart.toISOString().split('T')[0];
+                        filters.dateTo = monthEnd.toISOString().split('T')[0];
+                        break;
+                    }
+                }
+            }
+        }
         else if (t.type === 'text' && t.value.trim()) {
             textFilter += (textFilter ? ' ' : '') + t.value.trim();
         }
@@ -182,17 +222,18 @@ export function applySearchFilters(data: Order[], query: string): Order[] {
         }
 
         // Evaluate Date filter
-        if (filters.date) {
+        if (filters.dateFrom || filters.dateTo) {
             const ts = new Date(order.timestamp).getTime();
-            const now = new Date();
-
-            // basic date matching...
-            if (filters.date.includes('today')) {
-                if (new Date(ts).toDateString() !== now.toDateString()) return false;
-            } else if (filters.date.includes('yesterday')) {
-                const yest = new Date(now);
-                yest.setDate(yest.getDate() - 1);
-                if (new Date(ts).toDateString() !== yest.toDateString()) return false;
+            if (filters.dateFrom) {
+                const fromTs = new Date(filters.dateFrom).getTime();
+                if (ts < fromTs) return false;
+            }
+            if (filters.dateTo) {
+                // Add 1 day to dateTo for inclusive range
+                const toDate = new Date(filters.dateTo);
+                toDate.setDate(toDate.getDate() + 1);
+                const toTs = toDate.getTime();
+                if (ts >= toTs) return false;
             }
         }
 

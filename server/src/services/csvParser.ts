@@ -1,5 +1,6 @@
 import fs from 'fs';
 import csvParserLib from 'csv-parser';
+import crypto from 'crypto';
 import pool from '../config/db';
 import { calculateBatchTaxes, TaxResult } from './taxCalculator';
 
@@ -111,48 +112,87 @@ function taxCacheKey(lat: number, lon: number, timestamp: Date): string {
  *
  * Returns total imported/error counts.
  */
-export async function parseCsvAndImport(filePath: string): Promise<CsvImportResult> {
+export async function parseCsvAndImport(filePath: string, originalFilename: string): Promise<CsvImportResult> {
+    const startTimeMs = Date.now();
     let totalImported = 0;
     let totalErrors = 0;
 
-    // Read and validate CSV
-    const rows = await readCsvFile(filePath);
+    // ── Generate SHA-256 for Deduplication (streaming, non-blocking) ──
+    const fileHash = await new Promise<string>((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        const stream = fs.createReadStream(filePath);
+        stream.on('data', (chunk) => hash.update(chunk));
+        stream.on('end', () => resolve(hash.digest('hex')));
+        stream.on('error', reject);
+    });
+    const fileSizeBytes = fs.statSync(filePath).size;
 
-    const validRows: ValidatedRow[] = [];
-    for (const raw of rows) {
-        const validated = validateRow(raw);
-        if (validated) {
-            validRows.push(validated);
-        } else {
-            if (totalErrors < 5) {
-                console.error(`Row validation failed for row ${totalErrors}:`, raw);
+    // Check if this hash already exists
+    const client = await pool.connect();
+    try {
+        const hashCheck = await client.query('SELECT id FROM import_logs WHERE file_hash = $1', [fileHash]);
+        if (hashCheck.rows.length > 0) {
+            throw new Error(`Duplicate import detected. File with this hash was already imported (Log ID: ${hashCheck.rows[0].id}).`);
+        }
+
+        // Create import log FIRST so we get the import_id
+        const importLogInsert = await client.query(`
+            INSERT INTO import_logs (filename, file_hash, file_size_bytes)
+            VALUES ($1, $2, $3)
+            RETURNING id
+        `, [originalFilename, fileHash, fileSizeBytes]);
+        const importId = importLogInsert.rows[0].id;
+
+        // Read and validate CSV
+        const rows = await readCsvFile(filePath);
+
+        const validRows: ValidatedRow[] = [];
+        for (const raw of rows) {
+            const validated = validateRow(raw);
+            if (validated) {
+                validRows.push(validated);
+            } else {
+                if (totalErrors < 5) {
+                    console.error(`Row validation failed for row ${totalErrors}:`, raw);
+                }
+                totalErrors++;
             }
-            totalErrors++;
         }
-    }
 
-    // ── Global tax cache: shared across ALL chunks ──
-    const globalTaxCache = new Map<string, CachedTaxEntry>();
+        // ── Global tax cache: shared across ALL chunks ──
+        const globalTaxCache = new Map<string, CachedTaxEntry>();
 
-    // Build chunks
-    const chunks: ValidatedRow[][] = [];
-    for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
-        chunks.push(validRows.slice(i, i + CHUNK_SIZE));
-    }
-
-    // Process chunks in parallel with controlled concurrency
-    for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-        const batch = chunks.slice(i, i + CONCURRENCY);
-        const results = await Promise.all(
-            batch.map(chunk => processChunkOptimized(chunk, globalTaxCache))
-        );
-        for (const r of results) {
-            totalImported += r.imported;
-            totalErrors += r.errors;
+        // Build chunks
+        const chunks: ValidatedRow[][] = [];
+        for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
+            chunks.push(validRows.slice(i, i + CHUNK_SIZE));
         }
-    }
 
-    return { imported: totalImported, errors: totalErrors };
+        // Process chunks in parallel with controlled concurrency
+        for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+            const batch = chunks.slice(i, i + CONCURRENCY);
+            const results = await Promise.all(
+                batch.map(chunk => processChunkOptimized(chunk, globalTaxCache, importId))
+            );
+            for (const r of results) {
+                totalImported += r.imported;
+                totalErrors += r.errors;
+            }
+        }
+
+        // Update import_log with final stats
+        const processingTimeMs = Date.now() - startTimeMs;
+        await client.query(`
+            UPDATE import_logs 
+            SET rows_imported = $1, rows_failed = $2, processing_time_ms = $3
+            WHERE id = $4
+        `, [totalImported, totalErrors, processingTimeMs, importId]);
+
+        return { imported: totalImported, errors: totalErrors };
+
+    } finally {
+        client.release();
+    }
 }
 
 // ─── Internal Helpers ───────────────────────────────────────────
@@ -193,7 +233,8 @@ function readCsvFile(filePath: string): Promise<CsvRow[]> {
  */
 async function processChunkOptimized(
     chunk: ValidatedRow[],
-    globalTaxCache: Map<string, CachedTaxEntry>
+    globalTaxCache: Map<string, CachedTaxEntry>,
+    importId: string
 ): Promise<{ imported: number; errors: number }> {
     if (chunk.length === 0) return { imported: 0, errors: 0 };
 
@@ -238,6 +279,8 @@ async function processChunkOptimized(
         const lons: number[] = new Array(chunk.length);
         const subtotals: string[] = new Array(chunk.length);
         const compositeRates: string[] = new Array(chunk.length);
+        const taxAmounts: string[] = new Array(chunk.length);
+        const totalAmounts: string[] = new Array(chunk.length);
         const breakdowns: string[] = new Array(chunk.length);
         const jurisdictionsApplied: string[] = new Array(chunk.length);
         const timestamps: string[] = new Array(chunk.length);
@@ -247,40 +290,49 @@ async function processChunkOptimized(
             const key = taxCacheKey(row.lat, row.lon, row.timestamp);
             const cached = globalTaxCache.get(key)!;
 
+            // Compute tax using Decimal.js (Commercial Rounding / ROUND_HALF_UP)
+            // to match the precision layer used by manual orders
+            const { tax_amount, total_amount } = calcTax(row.subtotal, toDecimal(cached.result.composite_tax_rate));
+
             lats[i] = row.lat;
             lons[i] = row.lon;
             subtotals[i] = row.subtotal;
             compositeRates[i] = cached.result.composite_tax_rate;
+            taxAmounts[i] = tax_amount;
+            totalAmounts[i] = total_amount;
             breakdowns[i] = cached.breakdownJson;              // pre-serialized!
             jurisdictionsApplied[i] = cached.jurisdictionsJson; // pre-serialized!
             timestamps[i] = row.timestamp.toISOString();
         }
 
-        // ── Step 4: Batch INSERT — tax math + UUIDs done in PostgreSQL ──
-        // PostgreSQL ROUND(subtotal * rate, 2) matches Commercial Rounding
-        // gen_random_uuid() replaces Node.js crypto.randomUUID/uuidv4
+        // ── Step 4: Batch INSERT — tax amounts pre-computed with Decimal.js ──
+        // UUIDs generated by PostgreSQL gen_random_uuid()
+        // Tax math done in Node.js with ROUND_HALF_UP (Commercial Rounding)
+        // to match manual order precision
         const insertSql = `
             INSERT INTO orders (
                 id, lat, lon, subtotal,
                 composite_tax_rate, tax_amount, total_amount,
-                breakdown, jurisdictions_applied, timestamp
+                breakdown, jurisdictions_applied, timestamp, import_id
             )
             SELECT
                 gen_random_uuid(),
                 lat, lon, subtotal,
                 composite_rate,
-                ROUND(subtotal * composite_rate, 2),
-                subtotal + ROUND(subtotal * composite_rate, 2),
-                breakdown, jurisdictions_applied, ts
+                tax_amt,
+                total_amt,
+                breakdown, jurisdictions_applied, ts, $10
             FROM UNNEST(
                 $1::decimal[],
                 $2::decimal[],
                 $3::decimal[],
                 $4::decimal[],
-                $5::jsonb[],
-                $6::jsonb[],
-                $7::timestamptz[]
-            ) AS t(lat, lon, subtotal, composite_rate, breakdown, jurisdictions_applied, ts);
+                $5::decimal[],
+                $6::decimal[],
+                $7::jsonb[],
+                $8::jsonb[],
+                $9::timestamptz[]
+            ) AS t(lat, lon, subtotal, composite_rate, tax_amt, total_amt, breakdown, jurisdictions_applied, ts);
         `;
 
         await client.query(insertSql, [
@@ -288,9 +340,12 @@ async function processChunkOptimized(
             lons,
             subtotals,
             compositeRates,
+            taxAmounts,
+            totalAmounts,
             breakdowns,
             jurisdictionsApplied,
             timestamps,
+            importId
         ]);
 
         await client.query('COMMIT');

@@ -28,7 +28,7 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #09090B;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -37,5 +37,12 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3F3F46;
+  background: #FFD700;
+}
+
+/* Remove focus rings from Recharts wrappers and SVG surfaces */
+.recharts-wrapper,
+.recharts-surface,
+.recharts-responsive-container {
+  outline: none !important;
 }

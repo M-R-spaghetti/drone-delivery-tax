@@ -15,6 +15,11 @@ export default {
                 'pure-black': '#000000',
                 background: '#09090B',
             },
+            keyframes: {
+                shimmer: {
+                    '100%': { transform: 'translateX(100%)' },
+                }
+            }
         },
     },
     plugins: [],

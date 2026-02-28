@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Outer stealth-drone shuriken silhouette -->
+  <polygon points="32,2 38,26 62,32 38,38 32,62 26,38 2,32 26,26" fill="#FCE100"/>
+  <!-- Inner depth layer — recessed core -->
+  <polygon points="32,12 36,28 52,32 36,36 32,52 28,36 12,32 28,28" fill="#000000"/>
+  <!-- Inner sigil — razor core -->
+  <polygon points="32,18 34.5,29 46,32 34.5,35 32,46 29.5,35 18,32 29.5,29" fill="#FCE100" opacity="0.3"/>
+  <!-- Central targeting reticle -->
+  <rect x="30" y="30" width="4" height="4" fill="#FCE100"/>
+</svg>

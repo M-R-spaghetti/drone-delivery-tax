@@ -1,7 +1,66 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { importCsv } from '../api/orders';
-import { UploadCloud, CheckCircle2, AlertCircle } from 'lucide-react';
+
+const DataCoreIcon = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="1" />
+        <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="1" />
+        <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="1" />
+        <path d="M12 22V12" stroke="currentColor" strokeWidth="1" />
+    </svg>
+);
+
+function RandomString() {
+    const [str, setStr] = useState('');
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const chars = '0123456789ABCDEF!@#$%^&*()_+';
+            let result = '';
+            for (let i = 0; i < 48; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+            setStr(result);
+        }, 50);
+        return () => clearInterval(interval);
+    }, []);
+    return <span>{str}</span>;
+}
+
+function ProgressSimulation() {
+    const [progress, setProgress] = useState(0);
+    useEffect(() => {
+        const start = Date.now();
+        const duration = 4000;
+        const interval = setInterval(() => {
+            const elapsed = Date.now() - start;
+            let current = (elapsed / duration) * 100;
+            if (current > 99) current = 99;
+            setProgress(Math.floor(current));
+        }, 100);
+        return () => clearInterval(interval);
+    }, []);
+
+    const blocks = Array.from({ length: 20 }).map((_, i) => {
+        const active = i < Math.floor(progress / 5);
+        return (
+            <div key={i} className={`h-full w-full ${active ? 'bg-[#FFD700]' : 'bg-[#09090B]'}`} />
+        );
+    });
+
+    return (
+        <div className="flex flex-col gap-5 text-left w-full max-w-2xl mx-auto mt-8">
+            <div className="flex justify-between font-mono text-base uppercase tracking-[0.1em] font-medium text-zinc-300">
+                <span>PROCESSING_DATAGRAMS...</span>
+                <span className="text-[#FFD700]">[ {progress.toString().padStart(2, '0')}% ]</span>
+            </div>
+            <div className="h-6 flex gap-1.5 p-1.5 bg-[#09090B] border border-zinc-800 w-full shadow-[0_0_20px_rgba(255,215,0,0.05)]">
+                {blocks}
+            </div>
+            <div className="font-mono text-[10px] sm:text-xs md:text-sm text-zinc-500 truncate mt-3 tracking-[0.2em]">
+                <span className="text-[#FFD700]/70">{`> `}</span><RandomString />
+            </div>
+        </div>
+    );
+}
 
 export default function CsvUpload() {
     const queryClient = useQueryClient();
@@ -53,107 +112,141 @@ export default function CsvUpload() {
         [handleFile]
     );
 
+    const isDragOverCls = isDragOver && !mutation.isPending
+        ? 'border-[#FFD700] border-solid bg-[#FFD700] bg-opacity-[0.03] shadow-[inset_0_0_50px_rgba(255,215,0,0.05)]'
+        : 'border-zinc-800 border-dashed bg-transparent hover:bg-zinc-900/30 hover:border-[#FFD700]/30';
+
     return (
-        <div className="animate-fade-in-up h-full flex flex-col items-center justify-center -mt-10">
-            {/* Context Header */}
-            <div className="text-center mb-10 max-w-lg">
-                <div className="mx-auto w-12 h-12 flex items-center justify-center rounded-2xl bg-white/[0.04] border border-white/10 mb-5 shadow-2xl">
-                    <UploadCloud className="w-5 h-5 text-white" />
+        <div className="h-full w-full bg-[#050505] flex flex-col relative overflow-hidden font-mono text-white rounded-none">
+            {/* Background Grid */}
+            <div
+                className="absolute inset-0 z-0 pointer-events-none opacity-20"
+                style={{
+                    backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)',
+                    backgroundSize: '40px 40px'
+                }}
+            />
+
+            {/* Top Telemetry Strip */}
+            <div className="w-full flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 py-2 sm:py-2.5 border-b border-zinc-800/80 text-[10px] sm:text-[11px] text-zinc-500 tracking-[0.1em] sm:tracking-[0.2em] font-medium uppercase bg-[#09090B] z-10 shrink-0 select-none gap-2 sm:gap-0">
+                <div className="flex gap-4 sm:gap-8">
+                    <span className={mutation.isPending ? "text-[#FFD700] font-bold" : "text-zinc-500"}>
+                        <span className={mutation.isPending ? "animate-pulse mr-2" : "hidden"}>●</span>
+                        [ UPLINK_NODE: {mutation.isPending ? 'ACTIVE' : 'OFFLINE'} ]
+                    </span>
+                    <span className="hidden md:inline text-zinc-600">//[ ENCRYPTION: AES-256 SECURE ]</span>
                 </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-white mb-2">Ingest Ledger Data</h2>
-                <p className="text-sm text-zinc-400 leading-relaxed">
-                    Upload geospatial tax records in bulk. Our PostGIS engine will automatically calculate precision composite rates bounded by NYS regions.
-                </p>
+                <span className="text-zinc-600">//[ PROTOCOL: NYS_DRONE_TAX_V2 ]</span>
             </div>
 
-            {/* Cinematic Drop Zone */}
-            <div className="w-full max-w-2xl relative group">
-                {/* Glow Behind */}
-                <div className={`absolute -inset-1 blur-xl opacity-0 transition-opacity duration-500 rounded-3xl z-0 ${isDragOver && !mutation.isPending ? 'opacity-100 bg-blue-500/20' : ''}`} />
+            {/* Corner Greebling */}
+            <div className="absolute top-16 left-6 w-8 h-8 border-l border-t border-zinc-800 z-0" />
+            <div className="absolute top-16 right-6 w-8 h-8 border-r border-t border-zinc-800 z-0" />
+            <div className="absolute bottom-6 left-6 w-8 h-8 border-l border-b border-zinc-800 z-0" />
+            <div className="absolute bottom-6 right-6 w-8 h-8 border-r border-b border-zinc-800 z-0" />
 
-                <div
-                    onDrop={onDrop}
-                    onDragOver={onDragOver}
-                    onDragLeave={onDragLeave}
-                    onClick={() => !mutation.isPending && fileRef.current?.click()}
-                    className={`relative z-10 w-full rounded-2xl p-12 text-center transition-all duration-300 ease-out cursor-pointer overflow-hidden backdrop-blur-xl ${mutation.isPending
-                        ? 'border border-white/5 bg-white/[0.01] cursor-not-allowed'
-                        : isDragOver
-                            ? 'border border-blue-500/50 bg-blue-500/[0.05] shadow-[0_0_30px_rgba(59,130,246,0.1)] scale-[1.02]'
-                            : 'border border-dashed border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/20'
-                        }`}
-                >
-                    <input
-                        ref={fileRef}
-                        type="file"
-                        accept=".csv"
-                        className="hidden"
-                        onChange={onFileChange}
-                        disabled={mutation.isPending}
-                    />
+            <div className="flex-1 flex flex-col items-center p-4 sm:p-6 md:p-8 lg:p-12 xl:p-16 z-10 w-full mx-auto min-h-0 overflow-y-auto custom-scrollbar">
 
-                    {mutation.isPending ? (
-                        <div className="flex flex-col items-center py-6 animate-pulse-glow">
-                            <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden mb-6 relative">
-                                <div className="absolute top-0 bottom-0 w-1/2 bg-blue-500 rounded-full animate-progress" />
+                <div className="w-full flex flex-col items-center my-auto py-4 sm:py-8 min-h-min">
+                    <div className="mb-6 sm:mb-10 lg:mb-14 text-center shrink-0">
+                        <h2 className="text-xl sm:text-3xl md:text-5xl lg:text-[3.5rem] leading-tight text-white mb-2 sm:mb-4 tracking-[0.02em] uppercase font-bold text-shadow-sm break-words">
+                            {`> AWAITING_PAYLOAD_UPLINK`}
+                        </h2>
+                        <p className="text-zinc-500 tracking-[0.1em] sm:tracking-[0.25em] text-xs sm:text-sm font-medium uppercase mt-2 sm:mt-4">
+                            Secure Ingestion Node {`//`} Standby
+                        </p>
+                    </div>
+
+                    {/* Dropzone */}
+                    <div
+                        onDrop={onDrop}
+                        onDragOver={onDragOver}
+                        onDragLeave={onDragLeave}
+                        onClick={() => !mutation.isPending && fileRef.current?.click()}
+                        className={`w-full p-6 sm:p-12 md:p-16 lg:p-24 border-[2px] transition-all duration-300 flex flex-col items-center justify-center relative bg-black/40 backdrop-blur-sm cursor-crosshair group min-h-[300px] shrink-0 ${isDragOverCls}`}
+                    >
+                        <input
+                            ref={fileRef}
+                            type="file"
+                            accept=".csv"
+                            className="hidden"
+                            onChange={onFileChange}
+                            disabled={mutation.isPending}
+                        />
+
+                        {mutation.isPending ? (
+                            <ProgressSimulation />
+                        ) : (
+                            <div className="flex flex-col items-center justify-center w-full h-full">
+                                <DataCoreIcon className={`w-12 h-12 sm:w-20 sm:h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 mb-4 sm:mb-8 transition-all duration-300 ${isDragOver ? 'text-[#FFD700] drop-shadow-[0_0_30px_rgba(255,215,0,0.3)] scale-105' : 'text-zinc-700 group-hover:text-zinc-500'}`} />
+
+                                <p className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold tracking-[0.05em] sm:tracking-[0.1em] uppercase mb-4 sm:mb-6 text-center text-zinc-300">
+                                    DRAG AND DROP ENCRYPTED CSV ARCHIVE HERE
+                                </p>
+
+                                <div className="bg-black border border-zinc-800 px-3 sm:px-6 md:px-8 py-2 sm:py-4 mb-6 sm:mb-10 text-[10px] sm:text-xs md:text-[14px] lg:text-[15px] tracking-[0.05em] sm:tracking-[0.15em] w-full max-w-2xl text-center font-medium shadow-inner flex flex-wrap justify-center items-center gap-1 sm:gap-2 lg:gap-x-0">
+                                    <span className="text-zinc-600">REQUIRED_SCHEMA:</span>
+                                    <span className="text-zinc-400 font-normal">{` [ `}</span>
+                                    <span className="text-[#FFD700]">lat</span><span className="text-zinc-600 lg:hidden px-0.5">{`,`}</span><span className="text-zinc-600 hidden lg:inline">{`, `}</span>
+                                    <span className="text-[#FFD700]">lon</span><span className="text-zinc-600 lg:hidden px-0.5">{`,`}</span><span className="text-zinc-600 hidden lg:inline">{`, `}</span>
+                                    <span className="text-[#FFD700]">subtotal</span><span className="text-zinc-600 lg:hidden px-0.5">{`,`}</span><span className="text-zinc-600 hidden lg:inline">{`, `}</span>
+                                    <span className="text-[#FFD700]">timestamp</span>
+                                    <span className="text-zinc-400 font-normal">{` ]`}</span>
+                                </div>
+
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); !mutation.isPending && fileRef.current?.click(); }}
+                                    className="bg-[#09090B] border border-zinc-700 text-[#FFD700]/90 font-bold text-xs sm:text-sm md:text-base px-6 sm:px-12 md:px-16 py-3 sm:py-4 uppercase tracking-[0.1em] sm:tracking-[0.15em] transition-all hover:bg-[#FFD700] hover:text-black hover:border-[#FFD700] focus:outline-none focus:ring-1 focus:ring-[#FFD700] focus:ring-offset-2 focus:ring-offset-black mt-auto sm:mt-0"
+                                    style={{ clipPath: 'polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px)' }}
+                                >
+                                    [ INIT_LOCAL_BROWSE ]
+                                </button>
                             </div>
-                            <p className="text-blue-400 font-medium tracking-tight">Geolocating records...</p>
-                            <p className="text-xs text-zinc-500 mt-2 font-mono uppercase tracking-widest">Executing PostGIS boundaries</p>
+                        )}
+                    </div>
+
+                    {/* Results Section */}
+                    {result && !mutation.isPending && (
+                        <div className="mt-6 sm:mt-10 w-full bg-black border border-zinc-800 border-l-[#FFD700] border-l-4 p-4 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-[0_10px_40px_-10px_rgba(255,215,0,0.05)] shrink-0">
+                            <div className="flex items-center gap-4 mb-4 sm:mb-0">
+                                {result.errors > 0 ? (
+                                    <div className="w-4 h-4 bg-zinc-600 animate-pulse" />
+                                ) : (
+                                    <div className="w-4 h-4 bg-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.4)]" />
+                                )}
+                                <h3 className={`text-lg uppercase tracking-[0.15em] font-bold ${result.errors > 0 ? 'text-zinc-400' : 'text-[#FFD700]'}`}>
+                                    UPLINK_TERMINATED : {result.errors > 0 ? 'PARTIAL_SUCCESS' : 'SUCCESS'}
+                                </h3>
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-12 text-[15px] font-medium uppercase tracking-[0.1em]">
+                                <span className="text-zinc-500">
+                                    <span className="text-zinc-300">PARSED_OK:</span> {result.imported.toLocaleString()}
+                                </span>
+                                {result.errors > 0 && (
+                                    <span className="text-zinc-500">
+                                        <span className="text-zinc-300">FAILED:</span> {result.errors.toLocaleString()}
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                    ) : (
-                        <div className="py-6 flex flex-col items-center">
-                            <div className={`p-4 rounded-full transition-colors duration-300 mb-4 ${isDragOver ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-zinc-400 group-hover:bg-white/10 group-hover:text-zinc-300'}`}>
-                                <UploadCloud className="w-6 h-6" />
+                    )}
+
+                    {/* Error Section */}
+                    {mutation.isError && !mutation.isPending && (
+                        <div className="mt-6 sm:mt-10 w-full bg-[#050505] border border-red-900/50 p-4 sm:p-8 flex flex-col gap-4 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="w-4 h-4 bg-red-600 animate-pulse" />
+                                <h3 className="text-lg uppercase tracking-[0.15em] font-bold text-red-500">
+                                    SYSTEM_EXCEPTION
+                                </h3>
                             </div>
-                            <p className="text-sm font-medium text-white mb-1">
-                                Drag & drop CSV payload, or <span className="text-blue-400 hover:text-blue-300 transition-colors underline underline-offset-4 pointer-events-auto">browse files</span>
-                            </p>
-                            <p className="text-xs text-zinc-500 font-mono tracking-wide mt-2">
-                                lat, lon, subtotal, timestamp
+                            <p className="text-[15px] text-red-400/80 font-mono tracking-[0.05em] break-all bg-red-950/20 p-6 border border-red-900/30 font-medium leading-relaxed">
+                                {`> ERROR: `}{(mutation.error as Error).message}
                             </p>
                         </div>
                     )}
                 </div>
             </div>
-
-            {/* Results Toast */}
-            {result && (
-                <div className="mt-8 animate-fade-in-up">
-                    <div className="px-6 py-4 rounded-xl border border-white/10 bg-white/[0.02] backdrop-blur-xl flex items-center gap-4 shadow-xl">
-                        {result.errors > 0 ? (
-                            <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                        ) : (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                        )}
-                        <div className="flex-1">
-                            <h3 className={`text-sm font-medium ${result.errors > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                                Processing Executed
-                            </h3>
-                            <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono mt-1">
-                                <span>Parsed: <strong className="text-white bg-white/10 px-1 py-0.5 rounded">{result.imported}</strong></span>
-                                {result.errors > 0 && (
-                                    <span>Failed: <strong className="text-amber-400 bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/20">{result.errors}</strong></span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Error Toast */}
-            {mutation.isError && (
-                <div className="mt-8 animate-fade-in-up max-w-lg w-full">
-                    <div className="rounded-xl p-4 bg-red-500/10 border border-red-500/20 shadow-[0_0_20px_rgba(239,68,68,0.1)] flex items-start gap-3 backdrop-blur-md">
-                        <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                        <div>
-                            <h3 className="text-sm font-semibold text-red-500 tracking-tight">System Exception</h3>
-                            <p className="text-xs text-red-400/80 mt-1 font-mono break-all leading-relaxed">
-                                {(mutation.error as Error).message}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

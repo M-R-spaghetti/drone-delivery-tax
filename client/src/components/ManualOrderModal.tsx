@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createOrder } from '../api/orders';
-import { X, MapPin, DollarSign, Calendar, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface Props {
     isOpen: boolean;
@@ -13,9 +13,22 @@ export default function ManualOrderModal({ isOpen, onClose }: Props) {
     const [lat, setLat] = useState('40.7831');
     const [lon, setLon] = useState('-73.9712');
     const [subtotal, setSubtotal] = useState('100.00');
-    const [timestamp, setTimestamp] = useState(
-        new Date().toISOString().slice(0, 16)
-    );
+
+    // Format current time exactly as YYYY-MM-DD HH:MM:SS
+    const formatCurrentTime = () => {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    const [timestamp, setTimestamp] = useState(formatCurrentTime());
+
+    // Refresh timestamp each time the modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setTimestamp(formatCurrentTime());
+        }
+    }, [isOpen]);
 
     const mutation = useMutation({
         mutationFn: createOrder,
@@ -27,142 +40,167 @@ export default function ManualOrderModal({ isOpen, onClose }: Props) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Parse the raw timestamp
+        // Replace space with T for valid ISO parsing if needed, but standard Date constructor usually handles 'YYYY-MM-DD HH:MM:SS'
+        const parsedDate = new Date(timestamp.replace(' ', 'T'));
+
         mutation.mutate({
             lat: parseFloat(lat),
             lon: parseFloat(lon),
             subtotal: parseFloat(subtotal),
-            timestamp: new Date(timestamp).toISOString(),
+            timestamp: parsedDate.toISOString(),
         });
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Dark blur backdrop */}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Dark blur backdrop with CRT scanline effect */}
             <div
-                className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300"
+                className="fixed inset-0 bg-[#000000]/90 backdrop-blur-md transition-opacity duration-300"
                 onClick={onClose}
+                style={{
+                    backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)',
+                    backgroundSize: '20px 20px'
+                }}
             />
 
-            {/* Modal Panel */}
-            <div className="relative bg-[#121214] border border-white/10 rounded-2xl w-full max-w-[420px] shadow-2xl shadow-black/80 animate-fade-in-up overflow-hidden">
+            {/* Modal Panel - The Override Interface */}
+            <div className="relative bg-[#000000] border border-[#FFD700] rounded-none w-full max-w-[600px] mx-4 shadow-[0_0_30px_rgba(255,215,0,0.1)] animate-fade-in-up overflow-hidden max-h-[90vh] flex flex-col">
                 {/* Header */}
-                <div className="px-6 py-4 flex items-center justify-between border-b border-white/[0.08]">
-                    <h2 className="text-sm font-semibold text-white tracking-tight">Manual Transaction</h2>
+                <div className="px-6 py-4 flex items-center justify-between border-b border-[#FFD700]/30 bg-[#09090B]">
+                    <div className="flex items-center gap-3">
+                        <span className="w-2 h-4 bg-[#FFD700] animate-[pulse_2s_infinite] shadow-[0_0_8px_rgba(255,215,0,0.6)]"></span>
+                        <h2 className="text-[13px] font-mono font-bold text-[#FFD700] tracking-[0.2em] uppercase drop-shadow-[0_0_5px_rgba(255,215,0,0.4)]">
+                            [ SYS.OVERRIDE // MANUAL_DATA_ENTRY ]
+                        </h2>
+                    </div>
                     <button
                         onClick={onClose}
-                        className="p-1.5 rounded-md text-zinc-500 hover:bg-white/10 hover:text-white transition-colors focus:outline-none"
+                        className="text-[10px] font-mono text-[#71717A] tracking-widest hover:text-white transition-colors uppercase cursor-pointer"
                     >
-                        <X className="w-4 h-4" />
+                        [ ESC_ABORT ]
                     </button>
                 </div>
 
-                {/* Form Body */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5 relative group">
-                            <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest pl-1">
-                                Latitude
-                            </label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-600">
-                                    <MapPin className="w-3.5 h-3.5" />
-                                </div>
-                                <input
-                                    type="number"
-                                    step="any"
-                                    value={lat}
-                                    onChange={(e) => setLat(e.target.value)}
-                                    required
-                                    className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-black border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-inner"
-                                />
+                {/* Form Body automatically enforces tight brutalism */}
+                <form onSubmit={handleSubmit} className="p-5 lg:p-8 space-y-5 lg:space-y-8 bg-gradient-to-b from-[#050505] to-[#000000] overflow-y-auto custom-scrollbar">
+                    {/* Amount Section */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-mono text-[#71717A] tracking-[0.2em] block">
+                            {'>'} PARAMETER: GROSS_SUBTOTAL
+                        </label>
+                        <div className="relative bg-[#050505] border border-zinc-800 transition-all focus-within:border-[#FFD700] focus-within:shadow-[0_0_15px_rgba(255,215,0,0.15),inset_0_0_10px_rgba(255,215,0,0.05)]">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#71717A] font-mono text-xl pointer-events-none select-none">
+                                $
                             </div>
-                        </div>
-                        <div className="space-y-1.5 relative group">
-                            <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest pl-1">
-                                Longitude
-                            </label>
                             <input
                                 type="number"
                                 step="any"
-                                value={lon}
-                                onChange={(e) => setLon(e.target.value)}
-                                required
-                                className="w-full px-3 py-2.5 rounded-lg bg-black border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-inner"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-1.5 align-middle">
-                        <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest pl-1">
-                            Gross Subtotal
-                        </label>
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-600">
-                                <DollarSign className="w-3.5 h-3.5" />
-                            </div>
-                            <input
-                                type="number"
-                                step="0.01"
                                 min="0"
                                 value={subtotal}
                                 onChange={(e) => setSubtotal(e.target.value)}
                                 required
-                                className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-black border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-inner"
+                                className="w-full pl-10 pr-4 py-4 bg-transparent border-none text-white font-mono text-3xl focus:outline-none rounded-none tracking-wider placeholder:text-zinc-800 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                placeholder="0.00"
                             />
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest pl-1">
-                            Timestamp
-                        </label>
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-600">
-                                <Calendar className="w-3.5 h-3.5" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Location Section */}
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-mono text-[#71717A] tracking-[0.2em] block">
+                                {'>'} PARAMETER: SPATIAL_COORDS
+                            </label>
+                            <div className="space-y-3">
+                                <div className="relative bg-[#050505] border border-zinc-800 transition-all focus-within:border-[#FFD700] focus-within:shadow-[0_0_15px_rgba(255,215,0,0.15),inset_0_0_10px_rgba(255,215,0,0.05)]">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] font-mono text-[11px] pointer-events-none select-none tracking-widest">
+                                        LAT:
+                                    </div>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={lat}
+                                        onChange={(e) => setLat(e.target.value)}
+                                        required
+                                        className="w-full pl-12 pr-3 py-3 bg-transparent border-none text-white font-mono text-sm focus:outline-none rounded-none tracking-wider [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                </div>
+                                <div className="relative bg-[#050505] border border-zinc-800 transition-all focus-within:border-[#FFD700] focus-within:shadow-[0_0_15px_rgba(255,215,0,0.15),inset_0_0_10px_rgba(255,215,0,0.05)]">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A] font-mono text-[11px] pointer-events-none select-none tracking-widest">
+                                        LNG:
+                                    </div>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={lon}
+                                        onChange={(e) => setLon(e.target.value)}
+                                        required
+                                        className="w-full pl-12 pr-3 py-3 bg-transparent border-none text-white font-mono text-sm focus:outline-none rounded-none tracking-wider [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                </div>
                             </div>
-                            <input
-                                type="datetime-local"
-                                value={timestamp}
-                                onChange={(e) => setTimestamp(e.target.value)}
-                                required
-                                className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-black border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all shadow-inner [&::-webkit-calendar-picker-indicator]:invert-[1] [&::-webkit-calendar-picker-indicator]:opacity-50"
-                            />
+                        </div>
+
+                        {/* Time Section */}
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-mono text-[#71717A] tracking-[0.2em] block">
+                                {'>'} PARAMETER: TEMPORAL_STAMP
+                            </label>
+                            <div className="h-full">
+                                <div className="relative bg-[#050505] border border-zinc-800 transition-all focus-within:border-[#FFD700] focus-within:shadow-[0_0_15px_rgba(255,215,0,0.15),inset_0_0_10px_rgba(255,215,0,0.05)] h-[116px] flex items-center justify-center p-4">
+                                    <input
+                                        type="text"
+                                        value={timestamp}
+                                        onChange={(e) => setTimestamp(e.target.value)}
+                                        required
+                                        className="w-full bg-transparent border-none text-white font-mono text-lg focus:outline-none rounded-none tracking-widest text-center"
+                                        placeholder="YYYY-MM-DD HH:MM:SS"
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     {/* Error display inline */}
                     {mutation.isError && (
-                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                            <p className="text-xs text-red-500 font-mono tracking-tight leading-relaxed">
-                                {(mutation.error as Error).message}
+                        <div className="p-3 bg-red-950/30 border border-red-900/50">
+                            <p className="text-[11px] text-red-500 font-mono tracking-widest uppercase">
+                                [ ERR ] :: {(mutation.error as Error).message}
                             </p>
                         </div>
                     )}
 
                     {/* Footer Actions */}
-                    <div className="pt-4 flex gap-3 border-t border-white/[0.08]">
+                    <div className="pt-8 border-t border-zinc-800 flex flex-col-reverse sm:flex-row gap-4 sm:justify-between items-center">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-[0.4] py-2.5 rounded-lg bg-white/5 border border-white/5 text-zinc-300 text-sm font-medium hover:bg-white/10 hover:text-white transition-all active:scale-95"
+                            className="w-full sm:w-auto px-6 py-3 bg-transparent border border-dashed border-[#71717A] text-[#71717A] font-mono text-[11px] uppercase tracking-[0.2em] hover:text-white hover:border-white transition-colors focus:outline-none rounded-none cursor-pointer"
                         >
-                            Cancel
+                            {'<'} ABORT_SEQUENCE {'>'}
                         </button>
                         <button
                             type="submit"
                             disabled={mutation.isPending}
-                            className="flex-1 py-2.5 rounded-lg bg-white text-black text-sm font-bold hover:bg-zinc-200 transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.1)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            className="w-full sm:w-auto px-8 py-3 bg-[#FFD700] text-black font-mono font-bold text-[12px] uppercase tracking-[0.2em] hover:brightness-110 transition-all focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed group rounded-none"
+                            style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
                         >
-                            {mutation.isPending ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin text-zinc-600" />
-                                    <span>Posting...</span>
-                                </>
-                            ) : (
-                                'Initiate Calculation'
-                            )}
+                            <span className="flex items-center justify-center gap-2">
+                                {mutation.isPending ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin text-black" />
+                                        <span>PROCESSING</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        {'>'} EXECUTE_INJECTION
+                                    </>
+                                )}
+                            </span>
                         </button>
                     </div>
                 </form>
