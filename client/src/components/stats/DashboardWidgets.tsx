@@ -1,9 +1,43 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { Download } from 'lucide-react';
 import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
     PieChart, Pie, Cell
 } from 'recharts';
+
+// ── Custom hook to measure container size via ResizeObserver ───────────
+// Replaces ResponsiveContainer to avoid the width(-1)/height(-1) bug.
+function useContainerSize(): [React.RefCallback<HTMLDivElement>, number, number] {
+    const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+    const roRef = useRef<ResizeObserver | null>(null);
+
+    const refCallback = useRef<React.RefCallback<HTMLDivElement>>((node: HTMLDivElement | null) => {
+        // Disconnect previous observer
+        if (roRef.current) {
+            roRef.current.disconnect();
+            roRef.current = null;
+        }
+
+        if (!node) {
+            setSize({ w: 0, h: 0 });
+            return;
+        }
+
+        const measure = () => {
+            const { width, height } = node.getBoundingClientRect();
+            setSize(prev => {
+                if (Math.abs(prev.w - width) < 1 && Math.abs(prev.h - height) < 1) return prev;
+                return { w: Math.floor(width), h: Math.floor(height) };
+            });
+        };
+
+        measure();
+        roRef.current = new ResizeObserver(measure);
+        roRef.current.observe(node);
+    });
+
+    return [refCallback.current, size.w, size.h];
+}
 
 const THEME = {
     bg: '#000000',
@@ -59,13 +93,15 @@ export const TaxBreakdownDonut = ({ data }: { data: TaxBreakdownData }) => {
         ].filter(v => v.value > 0);
     }, [data]);
 
+    const [pieRef, pieW, pieH] = useContainerSize();
+
     return (
         <div className="w-full h-full bg-[#050505] border border-zinc-800 p-5 flex flex-col relative overflow-hidden">
             <h3 className="text-base font-mono text-[#71717A] tracking-[0.2em] uppercase mb-4 border-b border-zinc-900 pb-2 font-bold shrink-0">Tax Breakdown</h3>
             <div className="relative flex-1 w-full min-h-[220px] flex items-center justify-center">
-                <div className="absolute inset-0">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
-                        <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                <div ref={pieRef} className="absolute inset-0">
+                    {pieW > 0 && pieH > 0 && (
+                        <PieChart width={pieW} height={pieH} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                             <Pie
                                 data={chartData}
                                 cx="50%" cy="50%"
@@ -88,7 +124,7 @@ export const TaxBreakdownDonut = ({ data }: { data: TaxBreakdownData }) => {
                                 formatter={(value: any) => fmtDist(value)}
                             />
                         </PieChart>
-                    </ResponsiveContainer>
+                    )}
                 </div>
                 {/* Center text directly layered on top, centered perfectly within the container */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10 px-2 text-center mx-auto" style={{ maxWidth: '65%' }}>
@@ -164,13 +200,15 @@ export const RevenueVsTaxChart = ({ data, dateRange }: { data: RevenueByDayItem[
         return result.sort((a, b) => a.date.localeCompare(b.date));
     }, [data, dateRange]);
 
+    const [revRef, revW, revH] = useContainerSize();
+
     return (
         <div className="w-full h-full bg-[#050505] border border-zinc-800 p-5 flex flex-col relative overflow-hidden">
             <div className="absolute top-0 left-0 w-3 h-3 border-t border-l border-[#FFD700]/50" />
             <h3 className="text-base font-mono text-[#71717A] tracking-[0.2em] uppercase mb-4 border-b border-zinc-900 pb-2 font-bold">Revenue vs Tax Velocity</h3>
-            <div className="overflow-hidden h-[280px] lg:h-[350px] xl:h-[430px]">
-                <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
-                    <AreaChart data={formattedData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+            <div ref={revRef} className="overflow-hidden h-[280px] lg:h-[350px] xl:h-[430px]">
+                {revW > 0 && revH > 0 && (
+                    <AreaChart width={revW} height={revH} data={formattedData} margin={{ top: 10, right: 10, bottom: 5, left: 10 }}>
                         <GlowDefs />
                         <defs>
                             <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -183,8 +221,8 @@ export const RevenueVsTaxChart = ({ data, dateRange }: { data: RevenueByDayItem[
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="2 2" stroke="#18181B" vertical={false} />
-                        <XAxis dataKey="date" stroke="#52525B" fontSize={13} fontFamily='"Space Mono", monospace' fontWeight="bold" tickLine={false} axisLine={false} dy={10} minTickGap={30} />
-                        <YAxis stroke="#52525B" fontSize={13} fontFamily='"Space Mono", monospace' fontWeight="bold" tickLine={false} axisLine={false} tickFormatter={fmtShort} />
+                        <XAxis dataKey="date" stroke="#52525B" fontSize={15} fontFamily='"Space Mono", monospace' fontWeight="bold" tickLine={false} axisLine={false} dy={15} minTickGap={30} />
+                        <YAxis stroke="#52525B" fontSize={15} fontFamily='"Space Mono", monospace' fontWeight="bold" tickLine={false} axisLine={false} tickFormatter={fmtShort} dx={-10} />
                         <Tooltip
                             contentStyle={{ backgroundColor: THEME.bg, border: `1px solid ${THEME.gold}`, borderLeft: `3px solid ${THEME.gold}`, borderRadius: 0, fontFamily: '"Space Mono", monospace', fontSize: '15px', color: THEME.white, boxShadow: '0 0 10px rgba(252,225,0,0.2)' }}
                             itemStyle={{ fontWeight: 700 }}
@@ -194,7 +232,7 @@ export const RevenueVsTaxChart = ({ data, dateRange }: { data: RevenueByDayItem[
                         <Area type="step" dataKey="revenue" stroke={THEME.white} strokeWidth={1} fillOpacity={1} fill="url(#colorRev)" filter="url(#glowWhite)" isAnimationActive={true} animationBegin={0} animationDuration={700} animationEasing="ease-out" />
                         <Area type="step" dataKey="tax" stroke={THEME.gold} strokeWidth={1.5} fillOpacity={1} fill="url(#colorTax)" filter="url(#glowGold)" isAnimationActive={true} animationBegin={100} animationDuration={700} animationEasing="ease-out" />
                     </AreaChart>
-                </ResponsiveContainer>
+                )}
             </div>
             <div className="absolute top-5 right-5 flex gap-4">
                 <div className="flex items-center gap-2"><div className="w-2 h-[2px] bg-white" /> <span className="text-sm font-mono text-zinc-500 uppercase font-bold">Gross</span></div>
@@ -455,19 +493,20 @@ export const AvgOrderValueTrend = ({ data, dateRange }: { data: AovByDayItem[], 
         };
     }, [activeNodes]);
 
+    const [aovRef, aovW, aovH] = useContainerSize();
+
     return (
         <div className="w-full h-full bg-[#050505] border border-zinc-800 p-5 flex flex-col relative overflow-hidden">
             <div className="flex justify-between items-start mb-2 gap-2">
                 <div className="flex flex-col gap-1 min-w-0">
-                    <span className="text-[10px] sm:text-base font-mono text-[#71717A] tracking-[0.1em] sm:tracking-[0.2em] uppercase font-bold truncate">Avg Order Value · Trend</span>
-                    <span className="text-[10px] sm:text-sm font-mono text-zinc-500 tracking-wider font-bold truncate">{trendData.length} data points</span>
+                    <span className="text-xs sm:text-base font-mono text-[#71717A] tracking-[0.1em] sm:tracking-[0.2em] uppercase font-bold truncate">Avg Order Value · Trend</span>
+                    <span className="text-xs sm:text-sm font-mono text-zinc-500 tracking-wider font-bold truncate">{trendData.length} data points</span>
                 </div>
                 <span className={`text-xs sm:text-base font-mono font-bold mt-1 shrink-0 whitespace-nowrap ${diff >= 0 ? 'text-[#FFD700]' : 'text-[#71717A]'}`}>{diff >= 0 ? '▲' : '▼'} ${Math.abs(diff).toFixed(2)}</span>
             </div>
-            <div className="text-2xl sm:text-3xl md:text-4xl font-mono text-white font-bold mb-3 w-full whitespace-nowrap overflow-hidden text-ellipsis leading-normal sm:leading-tight py-1">{fmtDist(currentAOV)}</div>
-            <div className="flex-1 overflow-hidden" style={{ minHeight: '180px' }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
-                    <AreaChart data={trendData} margin={{ top: 5, right: 5, bottom: 0, left: -15 }}>
+            <div ref={aovRef} className="flex-1 overflow-hidden" style={{ minHeight: '180px' }}>
+                {aovW > 0 && aovH > 0 && (
+                    <AreaChart width={aovW} height={aovH} data={trendData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                         <GlowDefs />
                         <defs>
                             <linearGradient id="aovGradient" x1="0" y1="0" x2="0" y2="1">
@@ -478,18 +517,18 @@ export const AvgOrderValueTrend = ({ data, dateRange }: { data: AovByDayItem[], 
                         <CartesianGrid strokeDasharray="3 3" stroke="#18181B" vertical={false} />
                         <XAxis
                             dataKey="label"
-                            tick={{ fill: '#52525B', fontSize: 10, fontFamily: 'monospace', fontWeight: 'bold' }}
+                            tick={{ fill: '#52525B', fontSize: 15, fontFamily: 'monospace', fontWeight: 'bold' }}
                             axisLine={{ stroke: '#27272A' }}
                             tickLine={false}
                             ticks={trendData.length > 0 ? Array.from(new Set([trendData[0].label, trendData[trendData.length - 1].label])) : undefined}
-                            dy={10}
+                            dy={15}
                         />
                         <YAxis
-                            tick={{ fill: '#52525B', fontSize: 10, fontFamily: 'monospace', fontWeight: 'bold' }}
+                            tick={{ fill: '#52525B', fontSize: 16, fontFamily: 'monospace', fontWeight: 'bold' }}
                             axisLine={false}
                             tickLine={false}
                             tickFormatter={(v: number) => `${v.toFixed(0)} $`}
-                            dx={-5}
+                            dx={-10}
                         />
                         <Tooltip
                             contentStyle={{
@@ -522,25 +561,25 @@ export const AvgOrderValueTrend = ({ data, dateRange }: { data: AovByDayItem[], 
                             filter="url(#glowGold)"
                         />
                     </AreaChart>
-                </ResponsiveContainer>
+                )}
             </div>
             {/* Summary stats */}
             <div className="flex flex-wrap sm:flex-nowrap justify-between items-end sm:items-center mt-3 pt-3 border-t border-zinc-900 gap-3">
-                <div className="flex gap-3 sm:gap-6 w-full sm:w-auto justify-between sm:justify-start">
+                <div className="flex gap-4 sm:gap-8 w-full sm:w-auto justify-between sm:justify-start">
                     <div className="flex flex-col gap-1">
-                        <span className="text-[10px] sm:text-xs font-mono text-zinc-600 uppercase tracking-wider font-bold">Min</span>
-                        <span className="text-xs sm:text-sm font-mono text-zinc-400 font-bold whitespace-nowrap">{stats.min.toFixed(2)} $</span>
+                        <span className="text-sm sm:text-base font-mono text-zinc-600 uppercase tracking-wider font-bold">Min</span>
+                        <span className="text-base sm:text-lg font-mono text-zinc-400 font-bold whitespace-nowrap">{stats.min.toFixed(2)} $</span>
                     </div>
                     <div className="flex flex-col gap-1">
-                        <span className="text-[10px] sm:text-xs font-mono text-[#FFD700]/70 uppercase tracking-wider font-bold">Avg</span>
-                        <span className="text-sm sm:text-base font-bold font-mono text-[#FFD700] whitespace-nowrap">{stats.avg.toFixed(2)} $</span>
+                        <span className="text-sm sm:text-base font-mono text-[#FFD700]/70 uppercase tracking-wider font-bold">Avg</span>
+                        <span className="text-lg sm:text-xl font-bold font-mono text-[#FFD700] whitespace-nowrap">{stats.avg.toFixed(2)} $</span>
                     </div>
                     <div className="flex flex-col gap-1">
-                        <span className="text-[10px] sm:text-xs font-mono text-zinc-600 uppercase tracking-wider font-bold">Max</span>
-                        <span className="text-xs sm:text-sm font-mono text-zinc-400 font-bold whitespace-nowrap">{stats.max.toFixed(2)} $</span>
+                        <span className="text-sm sm:text-base font-mono text-zinc-600 uppercase tracking-wider font-bold">Max</span>
+                        <span className="text-base sm:text-lg font-mono text-zinc-400 font-bold whitespace-nowrap">{stats.max.toFixed(2)} $</span>
                     </div>
                 </div>
-                <span className="text-[10px] sm:text-sm font-mono text-zinc-600 tracking-[0.2em] uppercase font-bold hidden sm:block">Daily AOV</span>
+                <span className="text-sm sm:text-base font-mono text-zinc-600 tracking-[0.2em] uppercase font-bold hidden sm:block">Daily AOV</span>
             </div>
         </div>
     );
@@ -568,18 +607,18 @@ export const TaxLiabilitySummary = ({ data }: { data: TaxBreakdownData }) => {
 
     return (
         <div className="w-full h-full bg-[#050505] border border-zinc-800 p-5 flex flex-col relative">
-            <div className="flex justify-between items-center mb-4 border-b border-zinc-900 pb-2">
-                <h3 className="text-base font-mono text-[#71717A] tracking-[0.2em] uppercase font-bold">Liability Vectors</h3>
-                <span className="text-base font-mono font-bold text-zinc-400">{fmtDist(liabs.totalTax)}</span>
+            <div className="flex justify-between items-center mb-4 border-b border-zinc-900 pb-2 gap-2">
+                <h3 className="text-xs sm:text-base font-mono text-[#71717A] tracking-[0.1em] sm:tracking-[0.2em] uppercase font-bold truncate min-w-0">Liability Vectors</h3>
+                <span className="text-xs sm:text-base font-mono font-bold text-zinc-400 whitespace-nowrap shrink-0">{fmtDist(liabs.totalTax)}</span>
             </div>
             <div className="flex-1 flex flex-col justify-around">
                 {liabs.arr.map((item, idx) => (
                     <div key={idx} className="w-full">
-                        <div className="flex justify-between text-xs sm:text-base font-mono uppercase mb-1">
-                            <span className="text-zinc-300 truncate pr-2 font-bold">{item.name}</span>
+                        <div className="flex justify-between items-center text-xs sm:text-base font-mono uppercase mb-1 gap-2">
+                            <span className="text-zinc-300 truncate font-bold min-w-0">{item.name}</span>
                             <div className="flex items-center gap-2 sm:gap-4 shrink-0">
                                 <span className="text-zinc-500 text-[10px] sm:text-sm font-bold">{item.pct.toFixed(1)}%</span>
-                                <span className="text-[#FFD700] font-bold whitespace-nowrap">{fmtDist(item.val)}</span>
+                                <span className="text-[#FFD700] font-bold whitespace-nowrap text-xs sm:text-base">{fmtDist(item.val)}</span>
                             </div>
                         </div>
                         <div className="w-full h-[2px] bg-zinc-900">
